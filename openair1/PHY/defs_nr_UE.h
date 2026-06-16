@@ -1,34 +1,10 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file PHY/defs_nr_UE.h
- \brief Top-level constants and data structures definitions for NR UE
- \author Guy De Souza, H. WANG, A. Mico Pereperez
- \date 2018
- \version 0.1
- \company Eurecom
- \email: desouza@eurecom.fr
- \note
- \warning
-*/
+/*!
+ *\brief Top-level constants and data structures definitions for NR UE
+ */
 #ifndef __PHY_DEFS_NR_UE__H__
 #define __PHY_DEFS_NR_UE__H__
 
@@ -39,12 +15,11 @@
 #endif
 #endif
 
-#include "common/cmake_defs.h"
 #include "defs_nr_common.h"
 #include "CODING/nrPolar_tools/nr_polar_pbch_defs.h"
 #include "PHY/defs_nr_sl_UE.h"
 #include "openair1/PHY/nr_phy_common/inc/nr_ue_phy_meas.h"
-
+#include "common/utils/threadPool/task_ans.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <malloc.h>
@@ -53,8 +28,8 @@
 #include "common_lib.h"
 #include "fapi_nr_ue_interface.h"
 #include "assertions.h"
-#include "barrier.h"
-#include "actor.h"
+#include "common/utils/barrier/barrier.h"
+#include "common/utils/actor/actor.h"
 //#include "openair1/SCHED_NR_UE/defs.h"
 
 #define msg(aRGS...) LOG_D(PHY, ##aRGS)
@@ -72,8 +47,6 @@
 #define openair_sched_exit() exit(-1)
 
 #define bzero(s,n) (memset((s),0,(n)))
-/// suppress compiler warning for unused arguments
-#define UNUSED(x) (void)x;
 
 // Set the number of barriers for processSlotTX to 512. This value has to be at least 483 for NTN where
 // DL-to-UL offset is up to 483. The selected value is also half of the frame range so that
@@ -84,7 +57,6 @@
 //       (0  + 0 * 20) % 512 = 0
 #define NUM_PROCESS_SLOT_TX_BARRIERS 512
 
-#include "impl_defs_top.h"
 #include "impl_defs_nr.h"
 #include "time_meas.h"
 #include "PHY/CODING/coding_defs.h"
@@ -92,6 +64,7 @@
 #include "PHY/TOOLS/tools_defs.h"
 #include "common/platform_types.h"
 #include "NR_UE_TRANSPORT/nr_transport_ue.h"
+#include "openair1/PHY/defs_common.h"
 
 #if defined(UPGRADE_RAT_NR)
   #include "PHY/NR_REFSIG/ss_pbch_nr.h"
@@ -363,8 +336,8 @@ typedef struct PHY_VARS_NR_UE_s {
   NR_UE_PRACH *prach_vars[NUMBER_OF_CONNECTED_gNB_MAX];
   NR_UE_PRS *prs_vars[NR_MAX_PRS_COMB_SIZE];
   uint8_t prs_active_gNBs;
-  NR_DL_UE_HARQ_t  dl_harq_processes[2][NR_MAX_DLSCH_HARQ_PROCESSES];
-  NR_UL_UE_HARQ_t  ul_harq_processes[NR_MAX_ULSCH_HARQ_PROCESSES];
+  NR_DL_UE_HARQ_t dl_harq_processes[2][NR_MAX_HARQ_PROCESSES];
+  NR_UL_UE_HARQ_t ul_harq_processes[NR_MAX_HARQ_PROCESSES];
 
   // Scrambling IDs used in PUSCH DMRS
   c16_t X_u[64][839];
@@ -429,9 +402,6 @@ typedef struct PHY_VARS_NR_UE_s {
   nrLDPC_coding_interface_t nrLDPC_coding_interface;
   uint8_t max_ldpc_iterations;
 
-  /// SRS variables
-  nr_srs_info_t *nr_srs_info;
-
   /// CSI variables
   nr_csi_info_t *nr_csi_info;
 
@@ -441,6 +411,10 @@ typedef struct PHY_VARS_NR_UE_s {
 
   /// Phase precompensation flag
   bool no_phase_pre_comp;
+
+  /// Enable ML-based LLR computation for 2-layer MIMO (QPSK/16QAM/64QAM).
+  /// When false (default), MMSE equalization is used for all configurations.
+  bool do_ml;
 
   void* scopeData;
   // Pointers to hold PDSCH data only for phy simulators
@@ -498,6 +472,7 @@ typedef struct {
   int foFlag;
   int targetNidCell;
   c16_t **rxdata;
+  int rxdata_sz;
   NR_DL_FRAME_PARMS *fp;
   UE_nr_rxtx_proc_t *proc;
   int nFrames;
@@ -515,28 +490,52 @@ typedef struct {
   task_ans_t *ans;
 } nr_ue_ssb_scan_t;
 
+typedef struct {
+  bool success;
+  int pos;
+  int nid2;
+  int freq_offset; // PSS frequency offset estimate
+  int peak; // PSS correlation peak power
+  int avg; // PSS correlation average power
+} pss_detection_result_t;
+
+typedef struct {
+  bool success;
+  int nid_cell; // detected PCI
+  int32_t metric; // SSS detection metric
+  int freq_offset; // SSS frequency offset estimate
+  int phase; // SSS phase
+} sss_detection_result_t;
+
 // Common SSB search parameters - used by both initial sync and neighbor cell search
 typedef struct {
-  const NR_DL_FRAME_PARMS *frame_parms;
-  c16_t **rxdata;
+  uint64_t dl_CarrierFreq;
+  uint sampling_rate;
+  int slots_per_frame;
+  int slots_per_subframe;
+  int numerology_index;
+  int ofdm_symbol_size;
+  uint ofdm_offset_divisor;
+  int nb_antennas_rx;
+  int symbols_per_slot;
+  int first_carrier_offset;
+  int N_RB_DL;
   uint32_t rxdata_size;
+  c16_t **rxdata;
+  int nb_prefix_samples;
+  int nb_prefix_samples0;
   int ssb_start_subcarrier;
+  int subcarrier_spacing;
+  int samples_per_slot_wCP;
   int target_nid_cell; // -1 for blind search, specific PCI for targeted search
   int exclude_nid_cell; // -1 for no exclusion, or serving cell PCI to exclude
   bool apply_freq_offset; // whether to compensate frequency offset
-  int search_frame_id; // Frame index to search (0, 1, 2...) within rxdata buffer
   bool fo_flag; // frequency offset estimation flag for pss_synchro_nr()
   void *rxdataF; // Pre-allocated rxdataF buffer
   void *pssTime; // Pre-generated PSS time sequences
   // Output parameters
-  int *detected_nid_cell; // detected PCI
-  int *ssb_offset; // SSB offset in samples
-  int32_t *sss_metric; // SSS detection metric
-  int *freq_offset_pss; // PSS frequency offset estimate
-  int *freq_offset_sss; // SSS frequency offset estimate
-  uint8_t *sss_phase; // SSS phase
-  int *pss_peak; // PSS correlation peak power
-  int *pss_avg; // PSS correlation average power
+  pss_detection_result_t pss_res;
+  sss_detection_result_t sss_res;
 } nr_ssb_search_params_t;
 
 typedef struct nr_phy_data_tx_s {
@@ -551,8 +550,9 @@ typedef struct nr_phy_data_tx_s {
 
 typedef struct nr_phy_data_s {
   NR_UE_PDCCH_CONFIG phy_pdcch_config;
+  fapi_nr_dl_config_dlsch_pdu_rel15_t dlsch_config;
   NR_UE_DLSCH_t dlsch[2];
-
+  int n_dlsch_codewords;
   // Sidelink Rx action decided by MAC
   sl_nr_rx_config_type_enum_t sl_rx_action;
   NR_UE_CSI_RS csirs_vars;
@@ -565,7 +565,7 @@ enum stream_status_e { STREAM_STATUS_UNSYNC, STREAM_STATUS_SYNCING, STREAM_STATU
  */
 typedef struct nr_rxtx_thread_data_s {
   UE_nr_rxtx_proc_t proc;
-  PHY_VARS_NR_UE    *UE;
+  PHY_VARS_NR_UE *UE;
   int writeBlockSize;
   nr_phy_data_t phy_data;
   dynamic_barrier_t* next_barrier;

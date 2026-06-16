@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 CC=gcc
 CXX=g++
 CFLAGS=-Wall -g -pthread -DT_TRACER -I. -I../incgen
@@ -8,7 +10,7 @@ CXXFLAGS=-Wall -g -pthread -DT_TRACER -I. -I../incgen -std=c++11
 LIBS=-lm
 XLIBS=-lX11 -lpng -lXft
 
-all: record record_db replay extract_config textlog enb ue vcd macpdu2wireshark \
+all: record replay extract_config textlog enb ue vcd macpdu2wireshark \
      extract_input_subframe extract_output_subframe to_vcd extract multi \
      gnb t_tracer_app_gnb t_tracer_app_ue gnb_mac csv
 

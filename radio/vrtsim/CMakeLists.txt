@@ -1,6 +1,4 @@
-# Noise device static lib
-add_library(noise_device STATIC noise_device.c)
-target_link_libraries(noise_device PRIVATE log_headers)
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
 
 # vrtsim module
 add_library(vrtsim MODULE
@@ -18,17 +16,19 @@ target_link_libraries(vrtsim
   PRIVATE
     SIMU
     shm_td_iq_channel
-    actor
     noise_device
     log_headers
-    pthread 
     yaml-cpp
+    channel_pipeline
+    thread-pool
 )
+if (ENABLE_CHANNEL_SIM_CUDA)
+  target_compile_definitions(vrtsim PRIVATE CHANNEL_SIM_CUDA)
+endif()
 
 # Optional taps client
 add_boolean_option(OAI_VRTSIM_TAPS_CLIENT OFF "Enable taps client" ON)
 if (OAI_VRTSIM_TAPS_CLIENT)
-  target_compile_definitions(vrtsim PRIVATE ENABLE_TAPS_CLIENT=1)
   target_link_libraries(vrtsim PRIVATE taps_client)
 
   file(DOWNLOAD
@@ -60,4 +60,26 @@ if (OAI_VRTSIM_TAPS_CLIENT)
   endif()
   target_link_libraries(taps_client PUBLIC ${FLATBUFFERS_TARGET})
   target_link_libraries(taps_client PUBLIC flatbuffers taps_api SIMU nanomsg)
+endif()
+
+
+if (ENABLE_TESTS)
+  add_library(vrtsim_static vrtsim.c cirdb_provider.c cirdb_yaml.cpp)
+  target_link_libraries(vrtsim_static
+    PUBLIC
+      SIMU
+      shm_td_iq_channel
+      noise_device
+      log_headers
+      yaml-cpp
+      channel_pipeline
+      thread-pool
+  )
+  if (OAI_VRTSIM_TAPS_CLIENT)
+    target_link_libraries(vrtsim_static PRIVATE taps_client)
+  endif()
+  if (CUDA_ENABLE)
+    target_compile_definitions(vrtsim_static PRIVATE CUDA_ENABLE)
+  endif()
+  add_subdirectory(tests)
 endif()

@@ -1,22 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include <errno.h>
@@ -196,12 +179,13 @@ void cirdb_connect(int id,
   float want_speed = (sel && sel->want_speed_mps > 0) ? sel->want_speed_mps : -1.0f;
 
   LOG_I(HW,
-        "CIRDB: Searching for entry with model_id=%d, antennas=%dx%d, DS=%.1fns, speed=%.1fm/s\n",
+        "CIRDB: Searching for entry with model_id=%d, antennas=%dx%d, DS=%.1fns, speed=%.1fm/s, AoA=%.1fdeg\n",
         want_model_id,
         G.num_tx,
         G.num_rx,
         want_ds,
-        want_speed);
+        want_speed,
+        sel->want_aoa_deg);
 
   cirdb_entry_meta_t m = (cirdb_entry_meta_t){0};
   cirdb_select_req_t req = {.want_model_id = want_model_id,
@@ -209,6 +193,7 @@ void cirdb_connect(int id,
                             .want_rx = G.num_rx,
                             .want_ds_ns = want_ds,
                             .want_speed_mps = want_speed,
+                            .want_aoa_deg = sel->want_aoa_deg,
                             .allow_shape_swap = 0,
                             .w_ds = 1.0f,
                             .w_speed = 0.2f,
@@ -296,7 +281,7 @@ void cirdb_connect(int id,
   }
 
   LOG_I(HW,
-        "CIRDB: Selected entry - model=%d DS=%.3fns shape=%ux%u L=%u/%u S=%u fs=%.0f dt=%.6fs speed=%.3fm/s\n",
+        "CIRDB: Selected entry - model=%d DS=%.3fns shape=%ux%u L=%u/%u S=%u fs=%.0f dt=%.6fs speed=%.3fm/s aoa=%.1fdeg\n",
         G.model_id,
         G.ds_ns,
         G.n_tx,
@@ -306,7 +291,8 @@ void cirdb_connect(int id,
         G.S,
         G.fs_hz,
         G.snapshot_dt_s,
-        G.speed_mps);
+        G.speed_mps,
+        sel->want_aoa_deg);
 }
 
 void cirdb_update(uint64_t ns_since_start)

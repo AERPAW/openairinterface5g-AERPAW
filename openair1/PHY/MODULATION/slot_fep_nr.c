@@ -1,22 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include "PHY/defs_gNB.h"
@@ -48,7 +31,10 @@ void nr_symbol_fep(const NR_DL_FRAME_PARMS *frame_parms,
     if (dft_stats) stop_meas(dft_stats);
 
     const bool is_sl = (link_type == link_type_sl);
-    apply_nr_rotation_symbol_RX(frame_parms,
+    apply_nr_rotation_symbol_RX(frame_parms->symbols_per_slot,
+                                frame_parms->slots_per_subframe,
+                                frame_parms->timeshift_symbol_rotation,
+                                frame_parms->first_carrier_offset,
                                 rxdataF[aa],
                                 frame_parms->symbol_rotation[link_type],
                                 is_sl ? frame_parms->N_RB_SL : frame_parms->N_RB_DL,
@@ -176,45 +162,39 @@ int nr_symbol_fep_ul(const NR_DL_FRAME_PARMS *fp,
   return 0;
 }
 
-void apply_nr_rotation_symbol_RX(const NR_DL_FRAME_PARMS *frame_parms,
+void apply_nr_rotation_symbol_RX(const int symbols_per_slot,
+                                 const int slots_per_subframe,
+                                 const c16_t *shift_rot,
+                                 const int first_carrier_offset,
                                  c16_t *rxdataF,
                                  const c16_t *rot,
                                  int nb_rb,
                                  int slot,
                                  int symbol)
 {
-  const int symb_offset = (slot % frame_parms->slots_per_subframe) * frame_parms->symbols_per_slot;
+  const int symb_offset = (slot % slots_per_subframe) * symbols_per_slot;
 
   c16_t rot2 = rot[symbol + symb_offset];
   rot2.i = -rot2.i;
-  LOG_D(PHY,"slot %d, symb_offset %d rotating by %d.%d\n", slot, symb_offset, rot2.r, rot2.i);
-  const c16_t *shift_rot = frame_parms->timeshift_symbol_rotation;
+  LOG_D(PHY, "slot %d, symb_offset %d rotating by %d.%d\n", slot, symb_offset, rot2.r, rot2.i);
   c16_t *this_symbol = rxdataF;
 
   if (nb_rb & 1) {
-    rotate_cpx_vector(this_symbol, &rot2, this_symbol, (nb_rb + 1) * 6, 15);
-    rotate_cpx_vector(this_symbol + frame_parms->first_carrier_offset - 6,
-                      &rot2,
-                      this_symbol + frame_parms->first_carrier_offset - 6,
-                      (nb_rb + 1) * 6,
-                      15);
+    rotate_cpx_vector(this_symbol, rot2, this_symbol, (nb_rb + 1) * 6, 15);
+    rotate_cpx_vector(this_symbol + first_carrier_offset - 6, rot2, this_symbol + first_carrier_offset - 6, (nb_rb + 1) * 6, 15);
     mult_cpx_vector(this_symbol, shift_rot, this_symbol, (nb_rb + 1) * 6, 15);
-    mult_cpx_vector(this_symbol + frame_parms->first_carrier_offset - 6,
-                    shift_rot + frame_parms->first_carrier_offset - 6,
-                    this_symbol + frame_parms->first_carrier_offset - 6,
+    mult_cpx_vector(this_symbol + first_carrier_offset - 6,
+                    shift_rot + first_carrier_offset - 6,
+                    this_symbol + first_carrier_offset - 6,
                     (nb_rb + 1) * 6,
                     15);
   } else {
-    rotate_cpx_vector(this_symbol, &rot2, this_symbol, nb_rb * 6, 15);
-    rotate_cpx_vector(this_symbol + frame_parms->first_carrier_offset,
-                      &rot2,
-                      this_symbol + frame_parms->first_carrier_offset,
-                      nb_rb * 6,
-                      15);
+    rotate_cpx_vector(this_symbol, rot2, this_symbol, nb_rb * 6, 15);
+    rotate_cpx_vector(this_symbol + first_carrier_offset, rot2, this_symbol + first_carrier_offset, nb_rb * 6, 15);
     mult_cpx_vector(this_symbol, shift_rot, this_symbol, nb_rb * 6, 15);
-    mult_cpx_vector(this_symbol + frame_parms->first_carrier_offset,
-                    shift_rot + frame_parms->first_carrier_offset,
-                    this_symbol + frame_parms->first_carrier_offset,
+    mult_cpx_vector(this_symbol + first_carrier_offset,
+                    shift_rot + first_carrier_offset,
+                    this_symbol + first_carrier_offset,
                     nb_rb * 6,
                     15);
   }
@@ -227,13 +207,16 @@ void nr_ofdm_demod_and_rx_rotation(c16_t **rxdata,
                                    int slot,
                                    int slot_offsetF,
                                    enum nr_Link linktype,
-                                   bool was_symbol_used[NR_NUMBER_OF_SYMBOLS_PER_SLOT])
+                                   bool was_symbol_used[NR_SYMBOLS_PER_SLOT])
 {
   for (int aa = 0; aa < nb_antennas; aa++) {
     for (uint8_t symbol = 0; symbol < fp->symbols_per_slot; symbol++) {
       if (was_symbol_used[symbol] == true) {
         nr_symbol_fep_ul(fp, &rxdata[aa][0], &rxdataF[aa][slot_offsetF + symbol * fp->ofdm_symbol_size], symbol, slot, 0);
-        apply_nr_rotation_symbol_RX(fp,
+        apply_nr_rotation_symbol_RX(fp->symbols_per_slot,
+                                    fp->slots_per_subframe,
+                                    fp->timeshift_symbol_rotation,
+                                    fp->first_carrier_offset,
                                     &rxdataF[aa][slot_offsetF + symbol * fp->ofdm_symbol_size],
                                     fp->symbol_rotation[linktype],
                                     fp->N_RB_UL,

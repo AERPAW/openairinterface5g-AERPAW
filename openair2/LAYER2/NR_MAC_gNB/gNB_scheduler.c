@@ -1,33 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-
-/*! \file gNB_scheduler.c
- * \brief gNB scheduler top level function operates on per subframe basis
- * \author  Navid Nikaein and Raymond Knopp, WEI-TAI CHEN
- * \date 2010 - 2014, 2018
- * \email: navid.nikaein@eurecom.fr, kroempa@gmail.com
- * \version 0.5
- * \company Eurecom, NTUST
- * @ingroup _mac
-
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include "assertions.h"
@@ -197,7 +169,7 @@ void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame, slot_t slo
   }
 
   nr_measgap_scheduling(gNB, frame, slot);
-  nr_mac_update_timers(module_idP, frame, slot);
+  nr_mac_update_timers(module_idP);
 
   if (wait_prach_completed || get_softmodem_params()->phy_test) {
     // This schedules MIB
@@ -231,7 +203,7 @@ void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame, slot_t slo
   // Schedule CSI measurement reporting
   nr_csi_meas_reporting(module_idP, frame, slot);
 
-  nr_schedule_srs(module_idP, frame, slot);
+  nr_schedule_periodic_srs(module_idP, frame, slot);
 
   // This schedule RA procedure if not in phy_test mode
   // Otherwise consider 5G already connected

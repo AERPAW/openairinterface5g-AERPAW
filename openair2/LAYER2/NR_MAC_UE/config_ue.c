@@ -1,33 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/* \file config_ue.c
+/*
  * \brief UE configuration performed by RRC or as a consequence of RRC procedures
- * \author R. Knopp, K.H. HSU
- * \date 2018
- * \version 0.1
- * \company Eurecom / NTUST
- * \email: knopp@eurecom.fr, kai-hsiang.hsu@eurecom.fr
- * \note
- * \warning
  */
 
 #define _GNU_SOURCE
@@ -39,6 +15,8 @@
 #include "common/utils/nr/nr_common.h"
 #include "executables/softmodem-common.h"
 #include "SCHED_NR/phy_frame_config_nr.h"
+#include "RRC/NR_UE/verify_RRC.h"
+#include "RRC/NR_UE/L2_interface_ue.h"
 #include "oai_asn1.h"
 
 #define ASIGN_P_VAL(dst, src) \
@@ -96,28 +74,28 @@ static void set_tdd_config_nr_ue(fapi_nr_tdd_table_t *tdd_table, const frame_str
   for (int i = 0; i < fs->numb_slots_period; i++) {
     fapi_nr_max_tdd_periodicity_t *period_list = &tdd_table->max_tdd_periodicity_list[i];
     period_list->max_num_of_symbol_per_slot_list =
-      malloc(NR_NUMBER_OF_SYMBOLS_PER_SLOT * sizeof(*period_list->max_num_of_symbol_per_slot_list));
+      malloc(NR_SYMBOLS_PER_SLOT * sizeof(*period_list->max_num_of_symbol_per_slot_list));
     if (pc->tdd_slot_bitmap[i].slot_type == TDD_NR_DOWNLINK_SLOT) {
-      for (int s = 0; s < NR_NUMBER_OF_SYMBOLS_PER_SLOT; s++) {
+      for (int s = 0; s < NR_SYMBOLS_PER_SLOT; s++) {
         period_list->max_num_of_symbol_per_slot_list[s].slot_config = 0;
       }
     }
     if (pc->tdd_slot_bitmap[i].slot_type == TDD_NR_UPLINK_SLOT) {
-      for (int s = 0; s < NR_NUMBER_OF_SYMBOLS_PER_SLOT; s++) {
+      for (int s = 0; s < NR_SYMBOLS_PER_SLOT; s++) {
         period_list->max_num_of_symbol_per_slot_list[s].slot_config = 1;
       }
     }
     if (pc->tdd_slot_bitmap[i].slot_type == TDD_NR_MIXED_SLOT) {
       int dl_symb = pc->tdd_slot_bitmap[i].num_dl_symbols;
       int ul_symb = pc->tdd_slot_bitmap[i].num_ul_symbols;
-      int g_symb = NR_NUMBER_OF_SYMBOLS_PER_SLOT - dl_symb - ul_symb;
+      int g_symb = NR_SYMBOLS_PER_SLOT - dl_symb - ul_symb;
       for (int s = 0; s < dl_symb; s++) {
         period_list->max_num_of_symbol_per_slot_list[s].slot_config = 0;
       }
       for (int s = dl_symb; s < dl_symb + g_symb; s++) {
         period_list->max_num_of_symbol_per_slot_list[s].slot_config = 2;
       }
-      for (int s = dl_symb + g_symb; s < NR_NUMBER_OF_SYMBOLS_PER_SLOT; s++) {
+      for (int s = dl_symb + g_symb; s < NR_SYMBOLS_PER_SLOT; s++) {
         period_list->max_num_of_symbol_per_slot_list[s].slot_config = 1;
       }
     }
@@ -2106,8 +2084,8 @@ static void handle_reconfiguration_with_sync(NR_UE_MAC_INST_t *mac,
       configure_common_BWP_ul(mac, bwp_id, scc->uplinkConfigCommon->initialUplinkBWP);
 
     // Update PDCCH config as MAC configuration has changed
-    if (IS_SA_MODE(get_softmodem_params()))
-      update_pdcch_config(mac);
+    // Used only in SA mode.
+    mac->update_pdcch_config = IS_SA_MODE(get_softmodem_params());
   }
 
   mac->state = UE_NOT_SYNC_RECONF;
@@ -2576,7 +2554,9 @@ static void modify_csi_measconfig(NR_CSI_MeasConfig_t *source, NR_CSI_MeasConfig
   }
 }
 
-static void configure_csiconfig(NR_UE_ServingCell_Info_t *sc_info, struct NR_SetupRelease_CSI_MeasConfig *csi_MeasConfig_sr)
+static void configure_csiconfig(NR_UE_ServingCell_Info_t *sc_info,
+                                struct NR_SetupRelease_CSI_MeasConfig *csi_MeasConfig_sr,
+                                module_id_t ue_id)
 {
   switch (csi_MeasConfig_sr->present) {
     case NR_SetupRelease_CSI_MeasConfig_PR_NOTHING:
@@ -2598,6 +2578,8 @@ static void configure_csiconfig(NR_UE_ServingCell_Info_t *sc_info, struct NR_Set
       } else { // modification
         modify_csi_measconfig(csi_MeasConfig_sr->choice.setup, sc_info->csi_MeasConfig);
       }
+      if (!check_csi_report_consistency(sc_info->csi_MeasConfig))
+        nr_mac_rrc_verification_failed(ue_id);
       break;
     }
     default:
@@ -2609,7 +2591,7 @@ static void configure_servingcell_info(NR_UE_MAC_INST_t *mac, NR_ServingCellConf
 {
   NR_UE_ServingCell_Info_t *sc_info = &mac->sc_info;
   if (scd->csi_MeasConfig) {
-    configure_csiconfig(sc_info, scd->csi_MeasConfig);
+    configure_csiconfig(sc_info, scd->csi_MeasConfig, mac->ue_id);
     compute_csi_bitlen(sc_info->csi_MeasConfig, mac->csi_report_template);
   }
 

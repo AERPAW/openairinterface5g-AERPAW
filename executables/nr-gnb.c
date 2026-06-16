@@ -1,33 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file nr-gnb.c
+/*!
  * \brief Top-level threads for gNodeB
- * \author R. Knopp, F. Kaltenberger, Navid Nikaein
- * \date 2012
- * \version 0.1
- * \company Eurecom
- * \email: knopp@eurecom.fr,florian.kaltenberger@eurecom.fr, navid.nikaein@eurecom.fr
- * \note
- * \warning
  */
 
 #define _GNU_SOURCE
@@ -185,23 +161,30 @@ static void rx_func(processingData_L1_t *info)
     NR_UL_IND_t UL_INFO = {.frame = frame_rx, .slot = slot_rx, .module_id = gNB->Mod_id, .CC_id = gNB->CC_id};
     // Do PRACH RU processing
     UL_INFO.rach_ind.pdu_list = UL_INFO.prach_pdu_indication_list;
-    L1_nr_prach_procedures(gNB, frame_rx, slot_rx, &UL_INFO.rach_ind);
+    UL_INFO.rach_ind.number_of_pdus = 0;
+    // even if processing is late, we might collect all PRACH
+    // the last PRACH's frame/slot is when all UE's appear to have accessed
+    prach_item_t p;
+    while (spsc_q_get(&gNB->prach_l1rx_queue, &p, sizeof(p)))
+      L1_nr_prach_procedures(gNB, &p, &UL_INFO.rach_ind);
 
     //WA: comment rotation in tx/rx
     if (gNB->phase_comp) {
       //apply the rx signal rotation here
       int soffset = (slot_rx % RU_RX_SLOT_DEPTH) * gNB->frame_parms.symbols_per_slot * gNB->frame_parms.ofdm_symbol_size;
-      for (int bb = 0; bb < gNB->common_vars.num_beams_period; bb++) {
-        for (int aa = 0; aa < gNB->frame_parms.nb_antennas_rx; aa++) {
-          const uint max_symb = (gNB->frame_parms.Ncp == NR_EXTENDED) ? 12 : 14;
-          for (int sym = 0; sym < max_symb; sym++)
-            apply_nr_rotation_symbol_RX(&gNB->frame_parms,
-                                        gNB->common_vars.rxdataF[bb][aa] + soffset + sym * gNB->frame_parms.ofdm_symbol_size,
-                                        gNB->frame_parms.symbol_rotation[1],
-                                        gNB->frame_parms.N_RB_UL,
-                                        slot_rx,
-                                        sym);
-        }
+      const NR_DL_FRAME_PARMS *fp = &gNB->frame_parms;
+      for (int aa = 0; aa < fp->nb_antennas_rx; aa++) {
+        const uint max_symb = fp->Ncp == NR_EXTENDED ? 12 : 14;
+        for (int sym = 0; sym < max_symb; sym++)
+          apply_nr_rotation_symbol_RX(fp->symbols_per_slot,
+                                      fp->slots_per_subframe,
+                                      fp->timeshift_symbol_rotation,
+                                      fp->first_carrier_offset,
+                                      gNB->common_vars.rxdataF[aa] + soffset + sym * fp->ofdm_symbol_size,
+                                      fp->symbol_rotation[1],
+                                      fp->N_RB_UL,
+                                      slot_rx,
+                                      sym);
       }
     }
     phy_procedures_gNB_uespec_RX(gNB, frame_rx, slot_rx, &UL_INFO);
@@ -232,8 +215,7 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
   output += print_meas_log(&gNB->dlsch_encoding_stats, "DLSCH encoding", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->dlsch_scrambling_stats, "DLSCH scrambling", NULL, NULL, output, end-output);
   output += print_meas_log(&gNB->dlsch_modulation_stats, "DLSCH modulation", NULL, NULL, output, end - output);
-  output += print_meas_log(&gNB->dlsch_resource_mapping_stats, "DLSCH resource mapping", NULL, NULL, output,end-output);
-  output += print_meas_log(&gNB->dlsch_precoding_stats, "DLSCH precoding", NULL, NULL, output,end-output);
+  output += print_meas_log(&gNB->dlsch_pdsch_generation_stats, "PDSCH generation", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->phy_proc_rx, "L1 Rx processing", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->ts_deinterleave, "UL segment deinterleaving", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->ts_rate_unmatch, "UL segment rate recovery", NULL, NULL, output, end - output);
@@ -304,8 +286,7 @@ void *nrL1_stats_thread(void *param) {
   reset_meas(&gNB->rx_pusch_stats);
   reset_meas(&gNB->dlsch_scrambling_stats);
   reset_meas(&gNB->dlsch_modulation_stats);
-  reset_meas(&gNB->dlsch_resource_mapping_stats);
-  reset_meas(&gNB->dlsch_precoding_stats);
+  reset_meas(&gNB->dlsch_pdsch_generation_stats);
   while (!oai_exit) {
     sleep(1);
     if (ftruncate(fileno(fd), 0) != 0 || fseek(fd, 0, SEEK_SET) != 0) {
@@ -333,8 +314,6 @@ void init_gNB_Tpool(int inst)
   PHY_VARS_gNB *gNB;
   gNB = RC.gNB[inst];
   gNB_L1_proc_t *proc = &gNB->proc;
-  // PUSCH symbols per thread need to be calculated by how many threads we have
-  gNB->num_pusch_symbols_per_thread = 1;
   // ULSCH decoding threadpool
   initTpool(get_softmodem_params()->threadPoolConfig, &gNB->threadPool, cpumeas(CPUMEAS_GETSTATE));
 
@@ -383,10 +362,7 @@ void init_eNB_afterRU(void)
       AssertFatal(gNB->RU_list[ru_id]->common.rxdataF != NULL, "RU %d : common.rxdataF is NULL\n", gNB->RU_list[ru_id]->idx);
       for (int i = 0; i < gNB->RU_list[ru_id]->nb_rx; aa++, i++) {
         LOG_I(PHY, "Attaching RU %d antenna %d to gNB antenna %d\n", gNB->RU_list[ru_id]->idx, i, aa);
-        for (int b = 0; b < gNB->RU_list[ru_id]->num_beams_period; b++) {
-          int idx = i + b * gNB->RU_list[ru_id]->nb_rx;
-          gNB->common_vars.rxdataF[b][aa] = (c16_t *)gNB->RU_list[ru_id]->common.rxdataF[idx];
-        }
+        gNB->common_vars.rxdataF[aa] = (c16_t *)gNB->RU_list[ru_id]->common.rxdataF[i];
       }
     }
     /* TODO: review this code, there is something wrong.

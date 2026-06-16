@@ -1,22 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include "openair2/LAYER2/NR_MAC_UE/mac_defs.h"
@@ -77,19 +60,19 @@ void sl_set_tdd_config_nr_ue(fapi_nr_tdd_table_t *tdd_table,
 
   for(int memory_alloc = 0 ; memory_alloc < nb_slots_per_period; memory_alloc++)
     tdd_table->max_tdd_periodicity_list[memory_alloc].max_num_of_symbol_per_slot_list =
-      (fapi_nr_max_num_of_symbol_per_slot_t *) malloc(NR_NUMBER_OF_SYMBOLS_PER_SLOT*sizeof(fapi_nr_max_num_of_symbol_per_slot_t));
+      (fapi_nr_max_num_of_symbol_per_slot_t *) malloc(NR_SYMBOLS_PER_SLOT*sizeof(fapi_nr_max_num_of_symbol_per_slot_t));
 
   int slot_number = (nb_slots_per_period - nrofUplinkSlots) - (nrofUplinkSymbols ? 1 : 0);
   if (nrofUplinkSymbols != 0) {
-    for(int number_of_symbol = NR_NUMBER_OF_SYMBOLS_PER_SLOT - nrofUplinkSymbols; number_of_symbol < NR_NUMBER_OF_SYMBOLS_PER_SLOT; number_of_symbol++) {
+    for(int number_of_symbol = NR_SYMBOLS_PER_SLOT - nrofUplinkSymbols; number_of_symbol < NR_SYMBOLS_PER_SLOT; number_of_symbol++) {
       tdd_table->max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol].slot_config = 1;
     }
     slot_number++;
   }
   while(slot_number < nb_slots_per_period) {
-    for (int number_of_symbol = 0; number_of_symbol < nrofUplinkSlots * NR_NUMBER_OF_SYMBOLS_PER_SLOT; number_of_symbol++) {
-      tdd_table->max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol%NR_NUMBER_OF_SYMBOLS_PER_SLOT].slot_config = 1;
-      if((number_of_symbol + 1) % NR_NUMBER_OF_SYMBOLS_PER_SLOT == 0)
+    for (int number_of_symbol = 0; number_of_symbol < nrofUplinkSlots * NR_SYMBOLS_PER_SLOT; number_of_symbol++) {
+      tdd_table->max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol%NR_SYMBOLS_PER_SLOT].slot_config = 1;
+      if((number_of_symbol + 1) % NR_SYMBOLS_PER_SLOT == 0)
         slot_number++;
     }
   }
@@ -189,10 +172,10 @@ static void  sl_prepare_phy_config(int module_id,
   phycfg->sl_bwp_config.sl_start_symbol = (bwp_generic->sl_StartSymbol_r16) ?
                                                   *bwp_generic->sl_StartSymbol_r16 : 0;
 
-  //0-EXTENDED, 1-NORMAL CP
-  phycfg->sl_bwp_config.sl_cyclic_prefix = (sl_bwp->cyclicPrefix) ? EXTENDED : NORMAL;
+  //0-NORMAL CP, 1-EXTENDED
+  phycfg->sl_bwp_config.sl_cyclic_prefix = (sl_bwp->cyclicPrefix) ? 1 : 0;
 
-  AssertFatal(phycfg->sl_bwp_config.sl_cyclic_prefix == NORMAL, "Only NORMAL-CP Supported. Ext CP not yet supported\n");
+  AssertFatal(phycfg->sl_bwp_config.sl_cyclic_prefix == 0, "Only NORMAL-CP Supported. Ext CP not yet supported\n");
 
 
   AssertFatal(phycfg->sl_bwp_config.sl_start_symbol >= 0 && phycfg->sl_bwp_config.sl_start_symbol <=7,

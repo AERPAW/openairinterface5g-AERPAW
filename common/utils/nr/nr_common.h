@@ -1,33 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/* \file config_ue.c
+/*!
  * \brief common utility functions for NR (gNB and UE)
- * \author R. Knopp,
- * \date 2019
- * \version 0.1
- * \company Eurecom
- * \email: knopp@eurecom.fr
- * \note
- * \warning
  */
 
 #ifndef __COMMON_UTILS_NR_NR_COMMON__H__
@@ -37,6 +13,7 @@
 #include <stdlib.h>
 #include "assertions.h"
 #include "common/utils/utils.h"
+#include "common/utils/ds/byte_array.h"
 
 #define MAX_SI_GROUPS 3
 #define NR_MAX_PDSCH_TBS 3824
@@ -49,6 +26,9 @@
 #define NR_NB_SC_PER_RB 12
 #define NR_MAX_NUM_LCID 32
 #define NR_MAX_NUM_QFI 64
+#define MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER 36
+#define MAX_NUM_NR_ULSCH_SEGMENTS_PER_LAYER 34
+#define NR_MAX_SLOTS_PER_FRAME 160
 #define RNTI_NAMES /* see 38.321  Table 7.1-2  RNTI usage */      \
   R(TYPE_C_RNTI_) /* Cell RNTI */                                  \
   R(TYPE_CS_RNTI_) /* Configured Scheduling RNTI */                \
@@ -64,6 +44,11 @@
   R(TYPE_TPC_PUCCH_RNTI_) /* PUCCH power control */               \
   R(TYPE_TPC_SRS_RNTI_)                                           \
   R(TYPE_MCS_C_RNTI_)
+
+/* FFS_NR_TODO it defines ue capability which is the number of slots        */
+/* - between reception of pdsch and transmission of its acknowlegment  (k1) */
+/* - between reception of un uplink grant and its related transmission (k2) */
+#define NR_UE_CAPABILITY_SLOT_RX_TO_TX (3)
 
 #define R(k) k ,
 typedef enum { RNTI_NAMES } nr_rnti_type_t;
@@ -84,9 +69,11 @@ static inline const char *rnti_types(nr_rnti_type_t rr)
 
 #define MU_SCS(m) (15 << m)
 #define MAX_GSCN_BAND 620 // n78 has the highest GSCN range of 619
-#define NR_NUMBER_OF_SYMBOLS_PER_SLOT 14
-#define NR_NUMBER_OF_SYMBOLS_PER_SLOT_EXTENDED_CP 12
-#define NR_MAX_NB_LAYERS 4 // 8
+#define NR_SYMBOLS_PER_SLOT 14
+#define NR_SYMBOLS_PER_SLOT_EXTENDED_CP 12
+#define NR_MAX_NB_LAYERS 4
+#define MAX_NUM_NR_DLSCH_SEGMENTS (MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * NR_MAX_NB_LAYERS)
+#define MAX_NUM_NR_ULSCH_SEGMENTS (MAX_NUM_NR_ULSCH_SEGMENTS_PER_LAYER * NR_MAX_NB_LAYERS)
 #define NR_MAX_CSI_PORTS 12
 
 // Since the IQ samples are represented by SQ15 R+I (see https://en.wikipedia.org/wiki/Q_(number_format)) we need to compensate when
@@ -95,10 +82,32 @@ static inline const char *rnti_types(nr_rnti_type_t rr)
 // the total shift is 2 * 15, in dB scale thats 10log10(2^(15*2))
 #define SQ15_SQUARED_NORM_FACTOR_DB 90.3089986992
 
+typedef enum {
+  NR_SIB_1 = 1,
+  NR_SIB_2,
+  NR_SIB_3,
+  NR_SIB_4,
+  NR_SIB_5,
+  NR_SIB_6,
+  NR_SIB_7,
+  NR_SIB_8,
+  NR_SIB_9,
+  NR_SIB_10,
+  NR_SIB_11,
+  NR_SIB_12,
+  NR_SIB_13,
+  NR_SIB_14,
+  NR_SIB_15,
+  NR_SIB_16,
+  NR_SIB_17,
+  NR_SIB_18,
+  NR_SIB_19,
+  NR_SIB_20,
+  NR_SIB_21,
+} nr_sib_type_t;
+
 typedef struct {
-  uint8_t *SIB_buffer;
-  int SIB_size;
-  int SIB_type;
+  nr_sib_type_t SIB_type;
 } nr_SIBs_t;
 
 typedef struct nr_bandentry_s {
@@ -107,8 +116,10 @@ typedef struct nr_bandentry_s {
   uint64_t ul_max;
   uint64_t dl_min;
   uint64_t dl_max;
-  uint64_t step_size;
-  uint64_t N_OFFs_DL;
+  uint8_t ul_stepsize;
+  uint8_t dl_stepsize;
+  uint32_t N_OFFs_UL;
+  uint32_t N_OFFs_DL;
   uint8_t deltaf_raster;
 } nr_bandentry_t;
 
@@ -253,28 +264,7 @@ static inline int get_num_dmrs(uint16_t dmrs_mask )
   return(num_dmrs);
 }
 
-static inline int count_bits(uint8_t *arr, int sz)
-{
-  AssertFatal(sz % sizeof(int) == 0, "to implement if needed\n");
-  int ret = 0;
-  for (uint *ptr = (uint *)arr; (uint8_t *)ptr < arr + sz; ptr++)
-    ret += __builtin_popcount(*ptr);
-  return ret;
-}
-
-static __attribute__((always_inline)) inline int count_bits64(uint64_t v)
-{
-  return __builtin_popcountll(v);
-}
-
-static __attribute__((always_inline)) inline int count_bits64_with_mask(uint64_t v, int start, int num)
-{
-  uint64_t mask = ((1LL << num) - 1) << start;
-  return count_bits64(v & mask);
-}
-
 void warn_higher_threequarter_fs(const int n_rb, const int mu);
-
 uint64_t from_nrarfcn(int nr_bandP, uint8_t scs_index, uint32_t dl_nrarfcn);
 uint32_t to_nrarfcn(uint64_t dl_CarrierFreq);
 uint8_t set_ssb_case(int scs, int nr_band);
@@ -363,6 +353,10 @@ void nr_deconstruct_5g_s_tmsi(const uint64_t fiveg_s_tmsi, uint16_t *amf_set_id,
 #define CEILIDIV(a,b) ((a+b-1)/b)
 #define ROUNDIDIV(a,b) (((a<<1)+b)/(b<<1))
 #define BOUNDED_EVAL(a, b, c) (min(c, max(a, b)))
+
+/* Macro used to perform a circular increment. This implementation is computationally more efficient than using the remainder of the
+ * integer division, and improves code readability when compared to repetitive if... else statements. */
+#define CIRCULAR_INC(val, inc, size) (((val) + (inc) >= (size)) ? ((val) + (inc) - (size)) : ((val) + (inc)))
 
 static const char *const duplex_mode_txt[] = {"FDD", "TDD"};
 

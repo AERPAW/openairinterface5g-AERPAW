@@ -1,25 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
  
- #include "rrc_proto.h"
+#include "rrc_proto.h"
+#include "common/utils/bits.h"
  
 static bool check_resourcesForInterference(const NR_CSI_MeasConfig_t *meas, NR_CSI_ResourceConfigId_t res_id, bool is_CSIIM)
 {
@@ -136,8 +120,9 @@ static bool check_csi_resourceMapping_consistency(NR_CSI_RS_ResourceMapping_t re
             valid = false;
           break;
         case NR_CSI_RS_ResourceMapping__nrofPorts_p8: {
-          uint8_t freq = BIT_STRING_to_uint8(&resourceMapping.frequencyDomainAllocation.choice.other);
-          if (resourceMapping.cdm_Type == NR_CSI_RS_ResourceMapping__cdm_Type_cdm4_FD2_TD2 || count_bits(&freq, 1) != 4) {
+          uint32_t freq32 = 0;
+          freq32 = (uint32_t)BIT_STRING_to_uint8(&resourceMapping.frequencyDomainAllocation.choice.other);
+          if (resourceMapping.cdm_Type == NR_CSI_RS_ResourceMapping__cdm_Type_cdm4_FD2_TD2 || count_bits(&freq32, 1) != 4) {
             // row 7 and 8 -> l0+1
             if (resourceMapping.firstOFDMSymbolInTimeDomain == 13)
               valid = false;
@@ -205,7 +190,7 @@ static bool check_csi_resourceMapping_consistency(NR_CSI_RS_ResourceMapping_t re
   return true;
 }
 
-static bool check_csi_report_consistency(const NR_CSI_MeasConfig_t *meas)
+bool check_csi_report_consistency(const NR_CSI_MeasConfig_t *meas)
 {
   if (!meas || !meas->csi_ReportConfigToAddModList)
     return true;
@@ -240,8 +225,6 @@ static bool check_csi_resource_consistency(const NR_CSI_MeasConfig_t *meas)
 static bool check_csi_MeasConfig(struct NR_SetupRelease_CSI_MeasConfig *csi_MeasConfig)
 {
   const NR_CSI_MeasConfig_t *meas = csi_MeasConfig->choice.setup;
-  if (!check_csi_report_consistency(meas))
-    return false;
   if (!check_csi_resource_consistency(meas))
     return false;
   return true;
@@ -252,9 +235,9 @@ static bool check_srs_config(NR_SRS_Config_t *srs_Config)
   if (srs_Config->srs_ResourceToAddModList) {
     for (int i = 0; i < srs_Config->srs_ResourceToAddModList->list.count; i++) {
       NR_SRS_Resource_t *res = srs_Config->srs_ResourceToAddModList->list.array[i];
-      int start = NR_NUMBER_OF_SYMBOLS_PER_SLOT - res->resourceMapping.startPosition - 1;
+      int start = NR_SYMBOLS_PER_SLOT - res->resourceMapping.startPosition - 1;
       int num = 1 << res->resourceMapping.nrofSymbols;
-      if (start + num > NR_NUMBER_OF_SYMBOLS_PER_SLOT) {
+      if (start + num > NR_SYMBOLS_PER_SLOT) {
         LOG_E(NR_RRC, "The configured SRS resource exceeds the slot boundary\n");
         return false;
       }

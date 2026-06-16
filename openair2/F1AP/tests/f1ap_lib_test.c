@@ -1,31 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-
-/*! \file f1ap_lib_test.c
- * \brief Test functions for F1AP encoding/decoding library
- * \author Guido Casati, Robert Schmidt
- * \date 2024
- * \version 0.1
- * \note
- * \warning
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include <stdlib.h>
@@ -48,6 +22,7 @@
 
 void exit_function(const char *file, const char *function, const int line, const char *s, const int assert)
 {
+  UNUSED(assert);
   printf("detected error at %s:%d:%s: %s\n", file, line, function, s);
   abort();
 }
@@ -339,9 +314,9 @@ static void test_f1ap_setup_response(void)
     int SI_container_length = strlen(s) + 1;
     orig.cells_to_activate[0].num_SI = 1;
     f1ap_sib_msg_t *SI_msg = &orig.cells_to_activate[0].SI_msg[0];
-    SI_msg->SI_container = malloc_or_fail(SI_container_length);
-    memcpy(SI_msg->SI_container, (uint8_t *)s, SI_container_length);
-    SI_msg->SI_container_length = SI_container_length;
+    SI_msg->SI_container.buf = malloc_or_fail(SI_container_length);
+    memcpy(SI_msg->SI_container.buf, s, SI_container_length);
+    SI_msg->SI_container.len = SI_container_length;
     SI_msg->SI_type = 7;
   }
   F1AP_F1AP_PDU_t *f1enc = encode_f1ap_setup_response(&orig);
@@ -635,10 +610,10 @@ static void test_f1ap_du_configuration_update_acknowledge(void)
   orig.cells_to_activate[0].plmn.mnc_digit_length = 2;
   orig.cells_to_activate[0].num_SI = 1;
   orig.cells_to_activate[0].SI_msg[0].SI_type = 7;
-  orig.cells_to_activate[0].SI_msg[0].SI_container_length = 10;
-  orig.cells_to_activate[0].SI_msg[0].SI_container = malloc(sizeof(uint8_t) * 10);
-  for (int i = 0; i < orig.cells_to_activate[0].SI_msg[0].SI_container_length; i++) {
-    orig.cells_to_activate[0].SI_msg[0].SI_container[i] = i;
+  orig.cells_to_activate[0].SI_msg[0].SI_container.len = 10;
+  orig.cells_to_activate[0].SI_msg[0].SI_container.buf = malloc(sizeof(uint8_t) * 10);
+  for (int i = 0; i < (int)orig.cells_to_activate[0].SI_msg[0].SI_container.len; i++) {
+    orig.cells_to_activate[0].SI_msg[0].SI_container.buf[i] = i;
   }
   // ASN.1 enc/dec
   F1AP_F1AP_PDU_t *f1enc = encode_f1ap_du_configuration_update_acknowledge(&orig);
@@ -681,8 +656,8 @@ static void test_f1ap_cu_configuration_update(void)
   orig.cells_to_activate[0].plmn.mnc_digit_length = 2;
   orig.cells_to_activate[0].num_SI = 1;
   orig.cells_to_activate[0].SI_msg[0].SI_type = 7;
-  orig.cells_to_activate[0].SI_msg[0].SI_container_length = 10;
-  orig.cells_to_activate[0].SI_msg[0].SI_container = malloc(sizeof(uint8_t) * 10);
+  orig.cells_to_activate[0].SI_msg[0].SI_container.len = 10;
+  orig.cells_to_activate[0].SI_msg[0].SI_container.buf = malloc(sizeof(uint8_t) * 10);
   F1AP_F1AP_PDU_t *f1enc = encode_f1ap_cu_configuration_update(&orig);
   F1AP_F1AP_PDU_t *f1dec = f1ap_encode_decode(f1enc);
   f1ap_msg_free(f1enc);
@@ -758,6 +733,18 @@ static byte_array_t *get_malloced_test_ba(const char *s)
   return ba;
 }
 
+/** Minimal Flows-Mapped item: Non-Dynamic @p five_qi, @p qfi */
+static f1ap_drb_flows_mapped_t f1ap_drb_nr_mapped_flow_template(const f1ap_arp_t *arp, int qfi, int five_qi)
+{
+  DevAssert(arp != NULL);
+  f1ap_drb_flows_mapped_t f = {0};
+  f.qfi = qfi;
+  f.param.qos_type = NON_DYNAMIC;
+  f.param.nondyn.fiveQI = five_qi;
+  f.param.arp = *arp;
+  return f;
+}
+
 static void test_f1ap_ue_context_setup_request()
 {
   plmn_id_t plmn = { .mcc = 001, .mnc = 01, .mnc_digit_length = 2 };
@@ -790,15 +777,26 @@ static void test_f1ap_ue_context_setup_request()
   drb1->qos_choice = F1AP_QOS_CHOICE_NR;
   f1ap_arp_t arp = { 1, MAY_TRIGGER_PREEMPTION, PREEMPTABLE, };
   drb1->nr.drb_qos.qos_type = NON_DYNAMIC;
-  drb1->nr.drb_qos.nondyn.fiveQI = 3;
+  drb1->nr.drb_qos.nondyn.fiveQI = 2;
   drb1->nr.drb_qos.arp = arp;
+  // DRB-level GBR from highest priority flow (flow[0] has GBR)
+  drb1->nr.drb_qos.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+  drb1->nr.drb_qos.gbr_qos_flow_information->dl.guaranteedFlowBitRate = 100000; // 100 Mbps
+  drb1->nr.drb_qos.gbr_qos_flow_information->dl.maximumFlowBitRate = 200000; // 200 Mbps
+  drb1->nr.drb_qos.gbr_qos_flow_information->ul.guaranteedFlowBitRate = 50000; // 50 Mbps
+  drb1->nr.drb_qos.gbr_qos_flow_information->ul.maximumFlowBitRate = 100000; // 100 Mbps
   drb1->nr.nssai = (nssai_t) {.sst = 1, .sd = 123};
-  drb1->nr.flows_len = 1;
-  f1ap_drb_flows_mapped_t *flow = drb1->nr.flows = calloc_or_fail(drb1->nr.flows_len, sizeof(*flow));
-  flow->qfi = 2;
-  flow->param.qos_type = NON_DYNAMIC;
-  flow->param.nondyn.fiveQI = 3;
-  flow->param.arp = arp;
+  // Test case: Support multiple QoS flows
+  drb1->nr.flows_len = 2; // Test with 2 QoS flows
+  drb1->nr.flows = calloc_or_fail(drb1->nr.flows_len, sizeof(*drb1->nr.flows));
+  drb1->nr.flows[0] = f1ap_drb_nr_mapped_flow_template(&arp, 3, 2);
+  drb1->nr.flows[1] = f1ap_drb_nr_mapped_flow_template(&arp, 4, 8);
+  drb1->nr.flows[0].param.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+  *drb1->nr.flows[0].param.gbr_qos_flow_information =
+      (gbr_qos_flow_information_t){
+          .dl = {.guaranteedFlowBitRate = 100000, .maximumFlowBitRate = 200000},
+          .ul = {.guaranteedFlowBitRate = 50000, .maximumFlowBitRate = 100000},
+      };
   drb1->up_ul_tnl_len = 1;
   inet_pton(AF_INET, "192.168.40.23", &drb1->up_ul_tnl[0].tl_address);
   drb1->up_ul_tnl[0].teid = 0x11223344;
@@ -819,6 +817,12 @@ static void test_f1ap_ue_context_setup_request()
   _F1_MALLOC(dyn->avg_win, 3000);
   f1ap_arp_t arp2 = { 13, SHALL_NOT_TRIGGER_PREEMPTION, NOT_PREEMPTABLE, };
   drb2->nr.drb_qos.arp = arp2;
+  // DRB-level GBR from highest priority flow (flow2[0] has GBR)
+  drb2->nr.drb_qos.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+  drb2->nr.drb_qos.gbr_qos_flow_information->dl.guaranteedFlowBitRate = 50000; // 50 Mbps
+  drb2->nr.drb_qos.gbr_qos_flow_information->dl.maximumFlowBitRate = 150000; // 150 Mbps
+  drb2->nr.drb_qos.gbr_qos_flow_information->ul.guaranteedFlowBitRate = 25000; // 25 Mbps
+  drb2->nr.drb_qos.gbr_qos_flow_information->ul.maximumFlowBitRate = 75000; // 75 Mbps
   drb2->nr.nssai = (nssai_t) {.sst = 2, .sd = 0xffffff};
   drb2->nr.flows_len = 2;
   f1ap_drb_flows_mapped_t *flow2 = drb2->nr.flows = calloc_or_fail(drb2->nr.flows_len, sizeof(*flow2));
@@ -829,6 +833,12 @@ static void test_f1ap_ue_context_setup_request()
   flow2[0].param.dyn.per.scalar = 4;
   flow2[0].param.dyn.per.exponent = 8;
   flow2[0].param.arp = arp2;
+  // Add GBR information for Dynamic5QI GBR flow
+  flow2[0].param.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+  flow2[0].param.gbr_qos_flow_information->dl.guaranteedFlowBitRate = 50000; // 50 Mbps
+  flow2[0].param.gbr_qos_flow_information->dl.maximumFlowBitRate = 150000; // 150 Mbps
+  flow2[0].param.gbr_qos_flow_information->ul.guaranteedFlowBitRate = 25000; // 25 Mbps
+  flow2[0].param.gbr_qos_flow_information->ul.maximumFlowBitRate = 75000; // 75 Mbps
   flow2[1].qfi = 5;
   flow2[1].param.qos_type = NON_DYNAMIC;
   flow2[1].param.nondyn.fiveQI = 3;
@@ -1036,15 +1046,26 @@ static void test_f1ap_ue_context_modification_request()
   drb1->qos_choice = F1AP_QOS_CHOICE_NR;
   f1ap_arp_t arp = { 2, SHALL_NOT_TRIGGER_PREEMPTION, NOT_PREEMPTABLE, };
   drb1->nr.drb_qos.qos_type = NON_DYNAMIC;
-  drb1->nr.drb_qos.nondyn.fiveQI = 8;
+  drb1->nr.drb_qos.nondyn.fiveQI = 3;
   drb1->nr.drb_qos.arp = arp;
+  // DRB-level GBR from highest priority flow (flow[0] has GBR)
+  drb1->nr.drb_qos.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+  drb1->nr.drb_qos.gbr_qos_flow_information->dl.guaranteedFlowBitRate = 80000; // 80 Mbps
+  drb1->nr.drb_qos.gbr_qos_flow_information->dl.maximumFlowBitRate = 180000; // 180 Mbps
+  drb1->nr.drb_qos.gbr_qos_flow_information->ul.guaranteedFlowBitRate = 40000; // 40 Mbps
+  drb1->nr.drb_qos.gbr_qos_flow_information->ul.maximumFlowBitRate = 90000; // 90 Mbps
   drb1->nr.nssai = (nssai_t) {.sst = 2, .sd = 0xffffff};
-  drb1->nr.flows_len = 1;
-  f1ap_drb_flows_mapped_t *flow = drb1->nr.flows = calloc_or_fail(drb1->nr.flows_len, sizeof(*flow));
-  flow->qfi = 2;
-  flow->param.qos_type = NON_DYNAMIC;
-  flow->param.nondyn.fiveQI = 9;
-  flow->param.arp = arp;
+  // Test case: Support multiple QoS flows
+  drb1->nr.flows_len = 2; // Test with 2 QoS flows
+  drb1->nr.flows = calloc_or_fail(drb1->nr.flows_len, sizeof(*drb1->nr.flows));
+  drb1->nr.flows[0] = f1ap_drb_nr_mapped_flow_template(&arp, 5, 3);
+  drb1->nr.flows[1] = f1ap_drb_nr_mapped_flow_template(&arp, 6, 7);
+  drb1->nr.flows[0].param.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+  *drb1->nr.flows[0].param.gbr_qos_flow_information =
+      (gbr_qos_flow_information_t){
+          .dl = {.guaranteedFlowBitRate = 80000, .maximumFlowBitRate = 180000},
+          .ul = {.guaranteedFlowBitRate = 40000, .maximumFlowBitRate = 90000},
+      };
   drb1->up_ul_tnl_len = 1;
   inet_pton(AF_INET, "8.8.8.8", &drb1->up_ul_tnl[0].tl_address);
   drb1->up_ul_tnl[0].teid = 0x9876541;

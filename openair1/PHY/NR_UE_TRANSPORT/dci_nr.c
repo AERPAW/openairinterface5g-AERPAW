@@ -1,29 +1,10 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file dci_nr.c
+/*!
  * \brief Implements PDCCH physical channel TX/RX procedures (36.211) and DCI encoding/decoding (36.212/36.213). Current LTE
- * compliance V8.6 2009-03. \author R. Knopp, A. Mico Pereperez \date 2018 \version 0.1 \company Eurecom \email: knopp@eurecom.fr
- * \note
- * \warning
+ * compliance V8.6 2009-03.
  */
 
 #include <stdio.h>
@@ -243,12 +224,14 @@ static void nr_pdcch_extract_rbs_single(uint32_t rxdataF_sz,
      */
 
     c16_t middle_prb_buffer[RE_PER_RB];
-    for (int rb_group = 0; rb_group < coreset_nbr_rb / 6; rb_group++) {
+    int start = rb_offset / 6;
+    int size = coreset_nbr_rb / 6;
+    for (int rb_group = start; rb_group < start + size; rb_group++) {
       if ((coreset_freq_dom[rb_group / 8] & (1 << (7 - (rb_group & 7)))) == 0) {
         continue;
       }
       for (int rb = 0; rb < 6; rb++) {
-        int c_rb = rb_group * 6 + rb + rb_offset;
+        int c_rb = rb_group * 6 + rb;
         c16_t *rxF = NULL;
         if ((frame_parms->N_RB_DL & 1) == 0) {
           if ((c_rb + n_BWP_start) < frame_parms->N_RB_DL / 2)
@@ -343,11 +326,10 @@ static void nr_rx_pdcch_symbol(PHY_VARS_NR_UE *ue,
   if (coreset->CoreSetType == NFAPI_NR_CSET_CONFIG_PDCCH_CONFIG)
     dmrs_ref = phy_pdcch_config->pdcch_config[ss_idx].BWPStart;
   // generate pilot
-  c16_t pilot[(n_rb + dmrs_ref) * 3] __attribute__((aligned(16)));
+  c16_t pilot[(n_rb + rb_offset + dmrs_ref) * 3] __attribute__((aligned(16)));
   // Note: pilot returned by the following function is already the complex conjugate of the transmitted DMRS
-  const uint32_t *gold =
-      nr_gold_pdcch(ue->frame_parms.N_RB_DL, ue->frame_parms.symbols_per_slot, scrambling_id, proc->nr_slot_rx, symbol);
-  nr_pdcch_dmrs_ref(gold, pilot, n_rb + dmrs_ref);
+  const uint32_t *gold = nr_gold_pdcch(fp->N_RB_DL, fp->symbols_per_slot, scrambling_id, proc->nr_slot_rx, symbol);
+  nr_pdcch_dmrs_ref(gold, pilot, n_rb + rb_offset + dmrs_ref);
   nr_pdcch_channel_estimation(ue,
                               n_rb,
                               rb_offset,
@@ -363,7 +345,7 @@ static void nr_rx_pdcch_symbol(PHY_VARS_NR_UE *ue,
   __attribute__((aligned(32))) c16_t rxdataF_ext[fp->nb_antennas_rx][rx_size];
   __attribute__((aligned(32))) c16_t pdcch_dl_ch_estimates_ext[fp->nb_antennas_rx][rx_size];
 
-  nr_pdcch_extract_rbs_single(ue->frame_parms.ofdm_symbol_size,
+  nr_pdcch_extract_rbs_single(fp->ofdm_symbol_size,
                               rxdataF,
                               pdcch_est_size,
                               pdcch_dl_ch_estimates,
@@ -372,7 +354,7 @@ static void nr_rx_pdcch_symbol(PHY_VARS_NR_UE *ue,
                               pdcch_dl_ch_estimates_ext,
                               fp,
                               coreset->frequency_domain_resource,
-                              coreset->rb_offset,
+                              rb_offset,
                               n_rb,
                               phy_pdcch_config->pdcch_config[ss_idx].BWPStart);
 
@@ -401,16 +383,18 @@ static void nr_rx_pdcch_symbol(PHY_VARS_NR_UE *ue,
   nr_pdcch_llr(llr_size_symbol, rxdataF_comp[0], llr);
 }
 
-bool is_start_symbol_in_ss(const fapi_nr_dl_config_dci_dl_pdu_rel15_t *ss, const int symbol)
+static bool is_start_symbol_in_ss(const fapi_nr_dl_config_dci_dl_pdu_rel15_t *ss, const int symbol, const int nb_symb_slot)
 {
-  return ((ss->coreset.StartSymbolBitmap >> (NR_SYMBOLS_PER_SLOT - 1 - symbol)) & 1);
+  return ((ss->coreset.StartSymbolBitmap >> (nb_symb_slot - 1 - symbol)) & 1);
 }
 
-int get_pdcch_mon_occasions_slot(const fapi_nr_dl_config_dci_dl_pdu_rel15_t *ss, uint8_t start_symb[NR_SYMBOLS_PER_SLOT])
+static int get_pdcch_mon_occasions_slot(const fapi_nr_dl_config_dci_dl_pdu_rel15_t *ss,
+                                        int nb_symb_slot,
+                                        uint8_t start_symb[nb_symb_slot])
 {
   int sum = 0;
-  for (int s = 0; s < NR_SYMBOLS_PER_SLOT; s++) {
-    if (is_start_symbol_in_ss(ss, s)) {
+  for (int s = 0; s < nb_symb_slot; s++) {
+    if (is_start_symbol_in_ss(ss, s, nb_symb_slot)) {
       if (start_symb != NULL)
         start_symb[sum] = s;
       sum++;
@@ -420,22 +404,22 @@ int get_pdcch_mon_occasions_slot(const fapi_nr_dl_config_dci_dl_pdu_rel15_t *ss,
   return sum;
 }
 
-int get_max_pdcch_monOcc(const NR_UE_PDCCH_CONFIG *phy_pdcch_config)
+int get_max_pdcch_monOcc(const NR_UE_PDCCH_CONFIG *phy_pdcch_config, int nb_symb_slot)
 {
   int monOcc = 0;
   for (int ss = 0; ss < phy_pdcch_config->nb_search_space; ss++) {
-    monOcc = max(monOcc, get_pdcch_mon_occasions_slot(&phy_pdcch_config->pdcch_config[ss], NULL));
+    monOcc = max(monOcc, get_pdcch_mon_occasions_slot(&phy_pdcch_config->pdcch_config[ss], nb_symb_slot, NULL));
   }
   return monOcc;
 }
 
-void set_first_last_pdcch_symb(const NR_UE_PDCCH_CONFIG *phy_pdcch_config, int *first_symb, int *last_symb)
+void set_first_last_pdcch_symb(const NR_UE_PDCCH_CONFIG *phy_pdcch_config, int nb_symb_slot, int *first_symb, int *last_symb)
 {
-  *first_symb = NR_SYMBOLS_PER_SLOT; // max first pdcch symbol
+  *first_symb = nb_symb_slot; // max first pdcch symbol
   *last_symb = 0; // min last pdcch symbol
   for (int ss = 0; ss < phy_pdcch_config->nb_search_space; ss++) {
-    for (int symb = 0; symb < NR_SYMBOLS_PER_SLOT; symb++) {
-      if (is_start_symbol_in_ss(&phy_pdcch_config->pdcch_config[ss], symb)) {
+    for (int symb = 0; symb < nb_symb_slot; symb++) {
+      if (is_start_symbol_in_ss(&phy_pdcch_config->pdcch_config[ss], symb, nb_symb_slot)) {
         const int duration = phy_pdcch_config->pdcch_config[ss].coreset.duration;
         *first_symb = min(*first_symb, symb);
         *last_symb = max(*last_symb, symb + duration - 1);
@@ -460,7 +444,9 @@ void nr_pdcch_generate_llr(PHY_VARS_NR_UE *ue,
   // Loop over search spaces
   for (int ss_idx = 0; ss_idx < phy_pdcch_config->nb_search_space; ss_idx++) {
     uint8_t start_symb[NR_SYMBOLS_PER_SLOT] = {0};
-    const int num_monOcc = get_pdcch_mon_occasions_slot(&phy_pdcch_config->pdcch_config[ss_idx], start_symb);
+    const int num_monOcc = get_pdcch_mon_occasions_slot(&phy_pdcch_config->pdcch_config[ss_idx],
+                                                        ue->frame_parms.symbols_per_slot,
+                                                        start_symb);
     // Loop over monitoring occations within the slot in this ss
     for (int occ = 0; occ < num_monOcc; occ++) {
       const int first_symb = start_symb[occ];
@@ -609,7 +595,7 @@ void nr_pdcch_dci_indication(const UE_nr_rxtx_proc_t *proc,
   for (int ss_idx = 0; ss_idx < phy_pdcch_config->nb_search_space; ss_idx++) {
     fapi_nr_dl_config_dci_dl_pdu_rel15_t *rel15 = &phy_pdcch_config->pdcch_config[ss_idx];
     uint8_t unused_start_symb[NR_SYMBOLS_PER_SLOT] = {0};
-    const int num_monitoring_occ = get_pdcch_mon_occasions_slot(rel15, unused_start_symb);
+    const int num_monitoring_occ = get_pdcch_mon_occasions_slot(rel15, ue->frame_parms.symbols_per_slot, unused_start_symb);
     const int llr_stride = llr_size / rel15->coreset.duration;
     int n_rb, cset_start;
     get_coreset_rballoc(rel15->coreset.frequency_domain_resource, &n_rb, &cset_start);

@@ -1,27 +1,12 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include <stdio.h>
+#include <cuda.h>
 #include <cuda_runtime.h>
 #include "oai_cuda.h"
+
 
 __global__ void multipath_channel_kernel_batched(const float2 *__restrict__ d_channel_coeffs,
                                                  const float2 *__restrict__ tx_sig,
@@ -101,8 +86,18 @@ void init_cuda_chsim_buffers(int use_cuda,
     CHECK_CUDA(cudaMallocManaged(d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAttachGlobal));
     *h_tx_sig_pinned = *d_tx_sig;
     *h_final_output_pinned = *d_final_output;
+#if defined(CUDA_VERSION) && CUDA_VERSION >= 13000
+    cudaMemLocation deviceId;
+    deviceId.type = cudaMemLocationTypeDevice;
+    CHECK_CUDA(cudaGetDevice(&deviceId.id));
+    cudaMemLocation cpuDeviceId;
+    cpuDeviceId.id = cudaCpuDeviceId;
+    cpuDeviceId.type = cudaMemLocationTypeHost;
+#else
     int deviceId;
     CHECK_CUDA(cudaGetDevice(&deviceId));
+    int cpuDeviceId = cudaCpuDeviceId;
+#endif
     CHECK_CUDA(cudaMemAdvise(*d_tx_sig, padded_tx_alloc_bytes, cudaMemAdviseSetReadMostly, deviceId));
     CHECK_CUDA(cudaMemAdvise(*d_intermediate_sig,
                              n_rx * num_samples_alloc * sizeof(float) * 2,
@@ -111,7 +106,7 @@ void init_cuda_chsim_buffers(int use_cuda,
     CHECK_CUDA(
         cudaMemAdvise(*d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAdviseSetPreferredLocation, deviceId));
     CHECK_CUDA(
-        cudaMemAdvise(*d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
+        cudaMemAdvise(*d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAdviseSetAccessedBy, cpuDeviceId));
 
 #elif defined(USE_ATS_MEMORY)
     printf("Allocating memory for ATS Hybrid path...\n");

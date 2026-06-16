@@ -1,27 +1,13 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.0  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include "nr-ue-ru.h"
 #include "nr-uesoftmodem.h"
 #include "PHY/NR_UE_TRANSPORT/nr_transport_proto_ue.h"
+#include "common/config/config_paramdesc.h"
+#include "common/config/config_userapi.h"
+#include "openair1/PHY/phy_extern_nr_ue.h"
 
 /* NR UE RU configuration section name */
 #define CONFIG_STRING_NRUE_RU_LIST "RUs"
@@ -211,12 +197,6 @@ void nrue_set_ru_params(configmodule_interface_t *cfg)
   if (RUParamList.numelt <= 0) {
     nrue_ru_count = 1;
     nrue_rus = calloc_or_fail(nrue_ru_count, sizeof(nrUE_RU_params_t));
-    AssertFatal(get_nrUE_params()->nb_antennas_tx <= NB_ANTENNAS_TX,
-                "Config file has %d TX antennas set, but the compile time max value in NB_ANTENNAS_TX\n",
-                get_nrUE_params()->nb_antennas_tx);
-    AssertFatal(get_nrUE_params()->nb_antennas_rx <= NB_ANTENNAS_RX,
-                "Config file has %d RX antennas set, but the compile time max value in NB_ANTENNAS_RX\n",
-                get_nrUE_params()->nb_antennas_tx);
     nrue_rus[0] = (nrUE_RU_params_t){.nb_tx = get_nrUE_params()->nb_antennas_tx,
                                      .nb_rx = get_nrUE_params()->nb_antennas_rx,
                                      .att_tx = get_nrUE_params()->tx_gain,
@@ -308,8 +288,7 @@ void nrue_init_openair0(void)
         LOG_W(PHY, "Skipping initialization of RU %d because it is not used by any UE!\n", ru_id);
         continue;
       }
-      extern PHY_VARS_NR_UE ***PHY_vars_UE_g;
-      frame_parms = &PHY_vars_UE_g[UE_id][0]->SL_UE_PHY_PARAMS.sl_frame_params;
+      frame_parms = &nrPHY_vars_UE_g[UE_id][0]->SL_UE_PHY_PARAMS.sl_frame_params;
     }
 
     openair0_config_t *cfg = &openair0_cfg[ru_id];
@@ -370,6 +349,14 @@ void nrue_ru_start(void)
     AssertFatal(tmp2 == 0, "Could not start the device %d\n", ru_id);
     if (usrp_tx_thread == 1)
       dev0->trx_write_init(dev0);
+  }
+}
+
+void nrue_ru_stop(void)
+{
+  for (int ru_id = 0; ru_id < nrue_ru_count; ru_id++) {
+    if (openair0_dev[ru_id].trx_stop_func)
+      openair0_dev[ru_id].trx_stop_func(&openair0_dev[ru_id]);
   }
 }
 

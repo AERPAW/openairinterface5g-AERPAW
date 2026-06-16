@@ -1,23 +1,5 @@
-#/*
-# * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
-# * contributor license agreements.  See the NOTICE file distributed with
-# * this work for additional information regarding copyright ownership.
-# * The OpenAirInterface Software Alliance licenses this file to You under
-# * the OAI Public License, Version 1.1  (the "License"); you may not use this file
-# * except in compliance with the License.
-# * You may obtain a copy of the License at
-# *
-# *      http://www.openairinterface.org/?page_id=698
-# *
-# * Unless required by applicable law or agreed to in writing, software
-# * distributed under the License is distributed on an "AS IS" BASIS,
-# * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# * See the License for the specific language governing permissions and
-# * limitations under the License.
-# *-------------------------------------------------------------------------------
-# * For more information about the OpenAirInterface (OAI) Software Alliance:
-# *      contact@openairinterface.org
-# */
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 #---------------------------------------------------------------------
 # Python for CI of OAI-eNB + COTS-UE
 #
@@ -50,12 +32,11 @@ class RANManagement():
 
 	def __init__(self):
 		
-		self.ranRepository = ''
-		self.ranBranch = ''
-		self.ranAllowMerge = False
-		self.ranCommitID = ''
-		self.ranTargetBranch = ''
-		self.eNBSourceCodePath = ''
+		self.repository = ''
+		self.branch = ''
+		self.merge = False
+		self.targetBranch = ''
+		self.workspace = ''
 		self.Initialize_eNB_args = ''
 		self.imageKind = ''
 		self.eNBOptions = ['', '', '']
@@ -75,7 +56,7 @@ class RANManagement():
 			raise ValueError(f"{node=}")
 		logging.debug('Starting eNB/gNB on server: ' + node)
 
-		lSourcePath = self.eNBSourceCodePath
+		lSourcePath = self.workspace
 		cmd = cls_cmd.getConnection(node)
 		
 		# Initialize_eNB_args usually start with -O and followed by the location in repository
@@ -121,7 +102,7 @@ class RANManagement():
 
 	def TerminateeNB(self, ctx, node, HTML, to_analyze):
 		logging.debug('Stopping eNB/gNB on server: ' + node)
-		lSourcePath = self.eNBSourceCodePath
+		lSourcePath = self.workspace
 		cmd = cls_cmd.getConnection(node)
 		ret = cmd.run('ps -aux | grep --color=never -e softmodem | grep -v grep')
 		result = re.search('-softmodem', ret.stdout)
@@ -156,7 +137,7 @@ class RANManagement():
 
 	def AnalyzeRTStats(self, HTML, node, ctx, thresholds):
 		logging.info(f'Analyzing realtime stats from server: {node}')
-		lSourcePath = self.eNBSourceCodePath
+		lSourcePath = self.workspace
 
 		logdir = f'{lSourcePath}/cmake_targets'
 		with cls_cmd.getConnection(node) as cmd:

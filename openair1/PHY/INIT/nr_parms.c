@@ -1,22 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include "nr_phy_init.h"
@@ -409,7 +392,7 @@ int nr_init_frame_parms_ue(NR_DL_FRAME_PARMS *fp, fapi_nr_config_request_t* conf
   set_scs_parameters(fp, fp->numerology_index, N_RB, config->ssb_table.ssb_case);
 
   fp->slots_per_frame = 10* fp->slots_per_subframe;
-  fp->symbols_per_slot = ((Ncp == NR_NORMAL)? 14 : 12); // to redefine for different slot formats
+  fp->symbols_per_slot = ((Ncp == NR_NORMAL)? NR_SYMBOLS_PER_SLOT : NR_SYMBOLS_PER_SLOT_EXTENDED_CP);
   fp->samples_per_subframe_wCP = fp->ofdm_symbol_size * fp->symbols_per_slot * fp->slots_per_subframe;
   fp->samples_per_frame_wCP = 10 * fp->samples_per_subframe_wCP;
   fp->samples_per_slot_wCP = fp->symbols_per_slot*fp->ofdm_symbol_size; 
@@ -469,7 +452,7 @@ void nr_init_frame_parms_ue_sa(NR_DL_FRAME_PARMS *frame_parms, const nrUE_cell_p
   set_Lmax(frame_parms);
 
   frame_parms->slots_per_frame = 10* frame_parms->slots_per_subframe;
-  frame_parms->symbols_per_slot = ((frame_parms->Ncp == NR_NORMAL)? 14 : 12); // to redefine for different slot formats
+  frame_parms->symbols_per_slot = ((frame_parms->Ncp == NR_NORMAL)? NR_SYMBOLS_PER_SLOT : NR_SYMBOLS_PER_SLOT_EXTENDED_CP);
   frame_parms->samples_per_subframe_wCP = frame_parms->ofdm_symbol_size * frame_parms->symbols_per_slot * frame_parms->slots_per_subframe;
   frame_parms->samples_per_frame_wCP = 10 * frame_parms->samples_per_subframe_wCP;
   frame_parms->samples_per_slot_wCP = frame_parms->symbols_per_slot*frame_parms->ofdm_symbol_size;
@@ -570,7 +553,7 @@ int nr_init_frame_parms_ue_sl(NR_DL_FRAME_PARMS *fp,
   sl_set_scs_parameters(fp, fp->numerology_index, fp->N_RB_SL);
 
   fp->slots_per_frame = 10 * fp->slots_per_subframe;
-  fp->symbols_per_slot = ((fp->Ncp == NR_NORMAL) ? 14 : 12); // to redefine for different slot formats
+  fp->symbols_per_slot = ((fp->Ncp == NR_NORMAL) ? NR_SYMBOLS_PER_SLOT : NR_SYMBOLS_PER_SLOT_EXTENDED_CP);
   fp->samples_per_subframe_wCP = fp->ofdm_symbol_size * fp->symbols_per_slot * fp->slots_per_subframe;
   fp->samples_per_frame_wCP = 10 * fp->samples_per_subframe_wCP;
   fp->samples_per_slot_wCP = fp->symbols_per_slot * fp->ofdm_symbol_size;
@@ -585,9 +568,11 @@ int nr_init_frame_parms_ue_sl(NR_DL_FRAME_PARMS *fp,
 
   // ssb_offset_pointa points to the first RE where Sidelink-PSBCH starts
   fp->ssb_start_subcarrier = config->sl_bwp_config.sl_ssb_offset_point_a;
-
-  perform_symbol_rotation(fp, fp->sl_CarrierFreq, fp->symbol_rotation[link_type_sl]);
-  init_timeshift_rotation(fp);
+  perform_symbol_rotation(fp->symbols_per_slot * fp->slots_per_frame / 10,
+                          fp->numerology_index,
+                          fp->sl_CarrierFreq,
+                          fp->symbol_rotation[link_type_sl]);
+  init_timeshift_rotation(fp->ofdm_symbol_size, fp->nb_prefix_samples, fp->ofdm_offset_divisor, fp->timeshift_symbol_rotation);
 
   // Not used for Sidelink
   fp->Lmax = 0;

@@ -1,16 +1,5 @@
-/*Copyright 2017 Cisco Systems, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 
@@ -21,7 +10,6 @@
 #include "stddef.h"
 #include "common/platform_types.h"
 #include "fapi_nr_ue_constants.h"
-#include "PHY/impl_defs_top.h"
 #include "PHY/impl_defs_nr.h"
 #include "common/utils/nr/nr_common.h"
 #include "executables/position_interface.h"
@@ -130,6 +118,7 @@ typedef struct {
 
 typedef struct {
   uint8_t harq_pid;
+  uint8_t cw_idx;
   uint8_t ack_nack;
   uint32_t pdu_length;
   uint8_t* pdu;
@@ -479,6 +468,17 @@ typedef struct {
 typedef enum{vrb_to_prb_mapping_non_interleaved = 0, vrb_to_prb_mapping_interleaved = 1} vrb_to_prb_mapping_t;
 
 typedef struct {
+  uint8_t mcs;
+  bool new_data_indicator;
+  uint8_t rv;
+  uint16_t targetCodeRate;
+  uint8_t qamModOrder;
+  uint32_t TBS;
+  uint8_t ldpcBaseGraph;
+  uint8_t Nl;
+} fapi_nr_dl_cw_info_t;
+
+typedef struct {
   uint16_t BWPSize;
   uint16_t BWPStart;
   uint8_t SubcarrierSpacing;
@@ -494,15 +494,8 @@ typedef struct {
   uint8_t prb_bundling_size_ind;
   uint8_t rate_matching_ind;
   uint8_t zp_csi_rs_trigger;
-  uint8_t mcs;
-  bool new_data_indicator;
-  uint8_t rv;
-  uint16_t targetCodeRate;
-  uint8_t qamModOrder;
-  uint32_t TBS;
-  uint8_t tb2_mcs;
-  bool tb2_new_data_indicator;
-  uint8_t tb2_rv;
+  uint8_t n_codewords;
+  fapi_nr_dl_cw_info_t cw_info[2];
   uint8_t harq_process_nbr;
   vrb_to_prb_mapping_t vrb_to_prb_mapping;
   uint8_t dai;
@@ -535,7 +528,6 @@ typedef struct {
   uint16_t dlDataScramblingId;
   uint16_t pduBitmap;
   uint32_t k1_feedback;
-  uint8_t ldpcBaseGraph;
   uint8_t numCsiRsForRateMatching;
   fapi_nr_dl_config_csirs_pdu_rel15_t csiRsForRateMatching[NFAPI_MAX_NUM_CSI_RATEMATCH];
 } fapi_nr_dl_config_dlsch_pdu_rel15_t;

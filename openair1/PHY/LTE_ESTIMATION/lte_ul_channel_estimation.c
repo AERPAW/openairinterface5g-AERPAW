@@ -1,22 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include "PHY/defs_eNB.h"
@@ -73,7 +56,6 @@ int32_t lte_ul_channel_estimation(LTE_DL_FRAME_PARMS *frame_parms,
                                   c16_t **ul_ch_estimates,
                                   c16_t **ul_ch_estimates_time,
                                   c16_t **rxdataF_ext,
-                                  module_id_t UE_id,
                                   unsigned char l,
                                   unsigned char Ns)
 {
@@ -249,8 +231,8 @@ int32_t lte_ul_channel_estimation(LTE_DL_FRAME_PARMS *frame_parms,
             current_phase1 = cmin(abs(current_phase1),127);
             current_phase2 = cmin(abs(current_phase2), 127);
             // rotate channel estimates by estimated phase
-            rotate_cpx_vector(ul_ch1, &ru1[current_phase1], &ul_ch_estimates[aa][frame_parms->N_RB_UL * 12 * k], Msc_RS, 15);
-            rotate_cpx_vector(ul_ch2, &ru2[current_phase2], tmp_estimates, Msc_RS, 15);
+            rotate_cpx_vector(ul_ch1, ru1[current_phase1], &ul_ch_estimates[aa][frame_parms->N_RB_UL * 12 * k], Msc_RS, 15);
+            rotate_cpx_vector(ul_ch2, ru2[current_phase2], tmp_estimates, Msc_RS, 15);
             // Combine the two rotated estimates
             mult_complex_vector_real_scalar(&ul_ch_estimates[aa][frame_parms->N_RB_UL * 12 * k],
                                             SCALE,
@@ -454,8 +436,8 @@ int32_t lte_ul_channel_estimation_RRU(LTE_DL_FRAME_PARMS *frame_parms,
           current_phase1 = cmin(abs(current_phase1),127);
           current_phase2 = cmin(abs(current_phase2), 127);
           // rotate channel estimates by estimated phase
-          rotate_cpx_vector(ul_ch1, &ru1[current_phase1], &ul_ch_estimates[aa][frame_parms->N_RB_UL * 12 * k], Msc_RS, 15);
-          rotate_cpx_vector(ul_ch2, &ru2[current_phase2], tmp_estimates, Msc_RS, 15);
+          rotate_cpx_vector(ul_ch1, ru1[current_phase1], &ul_ch_estimates[aa][frame_parms->N_RB_UL * 12 * k], Msc_RS, 15);
+          rotate_cpx_vector(ul_ch2, ru2[current_phase2], tmp_estimates, Msc_RS, 15);
           // Combine the two rotated estimates
           mult_complex_vector_real_scalar(&ul_ch_estimates[aa][frame_parms->N_RB_UL * 12 * k],
                                           SCALE,

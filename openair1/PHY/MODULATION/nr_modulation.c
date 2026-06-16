@@ -1,25 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include "nr_modulation.h"
+#include "openair1/PHY/TOOLS/tools_defs.h"
 #include "PHY/NR_REFSIG/nr_mod_table.h"
 #include "executables/softmodem-common.h"
 #include <simde/x86/avx512.h>
@@ -471,9 +455,9 @@ void nr_layer_mapping(int nbCodes,
 	tx0++;
         *(uint32_t *)tx1 = vgetq_lane_u32(d4, 1); 
 	tx1++;
-        *(uint32_t *)tx2 = vgetq_lane_u32(d4, 0); 
+        *(uint32_t *)tx2 = vgetq_lane_u32(d4, 2); 
 	tx2++;
-        *(uint32_t *)tx3 = vgetq_lane_u32(d4, 1); 
+        *(uint32_t *)tx3 = vgetq_lane_u32(d4, 3); 
 	tx3++;
       }
 #endif
@@ -589,13 +573,12 @@ void nr_dft(c16_t *z, c16_t *d, uint32_t Msc_PUSCH)
   }
 }
 
-void perform_symbol_rotation(NR_DL_FRAME_PARMS *fp, double f0, c16_t *symbol_rotation)
+void perform_symbol_rotation(const int nsymb, const int numerology_index, double f0, c16_t *symbol_rotation)
 {
-  const int nsymb = fp->symbols_per_slot * fp->slots_per_frame / 10;
   const double Tc = (1 / 480e3 / 4096);
-  const double Nu = 2048 * 64 * (1 / (float)(1 << fp->numerology_index));
-  const double Ncp0 = 16 * 64 + (144 * 64 * (1 / (float)(1 << fp->numerology_index)));
-  const double Ncp1 = (144 * 64 * (1 / (float)(1 << fp->numerology_index)));
+  const double Nu = 2048 * 64 * (1 / (float)(1 << numerology_index));
+  const double Ncp0 = 16 * 64 + (144 * 64 * (1 / (float)(1 << numerology_index)));
+  const double Ncp1 = (144 * 64 * (1 / (float)(1 << numerology_index)));
 
   LOG_D(PHY, "Doing symbol rotation calculation for TX/RX, f0 %f Hz, Nsymb %d\n", f0, nsymb);
 
@@ -606,7 +589,7 @@ void perform_symbol_rotation(NR_DL_FRAME_PARMS *fp, double f0, c16_t *symbol_rot
 
   for (int l = 0; l < nsymb; l++) {
     double Ncp;
-    if (l == 0 || l == (7 * (1 << fp->numerology_index))) {
+    if (l == 0 || l == (7 * (1 << numerology_index))) {
       Ncp = Ncp0;
     } else {
       Ncp = Ncp1;
@@ -640,27 +623,29 @@ void init_symbol_rotation(NR_DL_FRAME_PARMS *fp)
     if (f0 == 0)
       continue;
     c16_t *rot = fp->symbol_rotation[ll];
-
-    perform_symbol_rotation(fp, f0, rot);
+    perform_symbol_rotation(fp->symbols_per_slot * fp->slots_per_frame / 10, fp->numerology_index, f0, rot);
   }
 }
 
-void init_timeshift_rotation(NR_DL_FRAME_PARMS *fp)
+void init_timeshift_rotation(const int ofdm_symbol_size,
+                             const int nb_prefix_samples,
+                             const uint ofdm_offset_divisor,
+                             c16_t *timeshift_symbol_rotation)
 {
-  const int sample_offset = fp->nb_prefix_samples / fp->ofdm_offset_divisor;
-  for (int i = 0; i < fp->ofdm_symbol_size; i++) {
-    double poff = -i * 2.0 * M_PI * sample_offset / fp->ofdm_symbol_size;
+  const int sample_offset = nb_prefix_samples / ofdm_offset_divisor;
+  for (int i = 0; i < ofdm_symbol_size; i++) {
+    double poff = -i * 2.0 * M_PI * sample_offset / ofdm_symbol_size;
     double exp_re = cos(poff);
     double exp_im = sin(-poff);
-    fp->timeshift_symbol_rotation[i].r = (int16_t)round(exp_re * 32767);
-    fp->timeshift_symbol_rotation[i].i = (int16_t)round(exp_im * 32767);
+    timeshift_symbol_rotation[i].r = (int16_t)round(exp_re * 32767);
+    timeshift_symbol_rotation[i].i = (int16_t)round(exp_im * 32767);
 
     if (i < 10)
       LOG_D(PHY,
             "Timeshift symbol rotation %d => (%d,%d) %f\n",
             i,
-            fp->timeshift_symbol_rotation[i].r,
-            fp->timeshift_symbol_rotation[i].i,
+            timeshift_symbol_rotation[i].r,
+            timeshift_symbol_rotation[i].i,
             poff);
   }
 }
@@ -705,12 +690,12 @@ c16_t nr_layer_precoder_cm(int n_layers,
                            int symSz,
                            c16_t datatx_F_precoding[n_layers][symSz],
                            int ap,
-                           nfapi_nr_pm_pdu_t *pmi_pdu,
+                           c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS],
                            int offset)
 {
   c16_t precodatatx_F = {0};
   for (int al = 0; al < n_layers; al++) {
-    c16_t prec_weight = pmi_pdu->weights[al][ap];
+    c16_t prec_weight = weights[al][ap];
     precodatatx_F = c16maddShift(datatx_F_precoding[al][offset], prec_weight, precodatatx_F, 15);
   }
   return precodatatx_F;
@@ -820,15 +805,15 @@ static inline __attribute__((always_inline)) __m128i cmac_prec128(__m128i y, __m
 #endif
 
 #define load_consts(Type, Instruct, Rank)                                          \
-  const Type w_c##Rank = Instruct(c16toI32(c16conj(pmi_pdu->weights[Rank][ant]))); \
-  const Type w_s##Rank = Instruct(c16toI32(c16swap(pmi_pdu->weights[Rank][ant]))); \
+  const Type w_c##Rank = Instruct(c16toI32(c16conj(weights[Rank][ant]))); \
+  const Type w_s##Rank = Instruct(c16toI32(c16swap(weights[Rank][ant]))); \
   const Type *in##Rank = (Type *)(txdataF_res_mapped[Rank] + sc_offset + (out-beginning));
 
 void nr_layer_precoder_simd(const int n_layers,
                             const int symSz,
                             const c16_t txdataF_res_mapped[n_layers][symSz],
                             const int ant,
-                            const nfapi_nr_pm_pdu_t *pmi_pdu,
+                            c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS],
                             const int sc_offset,
                             const int re_cnt,
                             c16_t *txdataF_precoded)

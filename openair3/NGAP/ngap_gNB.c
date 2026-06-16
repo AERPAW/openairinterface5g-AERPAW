@@ -1,30 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file ngap_gNB.c
+/*!
  * \brief NGAP gNB task
- * \author  Yoshio INOUE, Masayuki HARADA
- * \date 2020
- * \email: yoshio.inoue@fujitsu.com,masayuki.harada@fujitsu.com (yoshio.inoue%40fujitsu.com%2cmasayuki.harada%40fujitsu.com)
- * \version 1.0
  * @ingroup _ngap
  */
 
@@ -65,10 +44,6 @@
 #include "s1ap_messages_types.h"
 #include "sctp_messages_types.h"
 #include "tree.h"
-
-#if defined(TEST_S1C_AMF)
-  #include "oaisim_amf_test_s1c.h"
-#endif
 
 static int ngap_gNB_generate_ng_setup_request(
   ngap_gNB_instance_t *instance_p, ngap_gNB_amf_data_t *ngap_amf_data_p);
@@ -300,13 +275,8 @@ static
 void ngap_gNB_handle_sctp_data_ind(sctp_data_ind_t *sctp_data_ind) {
   int result;
   DevAssert(sctp_data_ind != NULL);
-#if defined(TEST_S1C_AMF)
-  amf_test_s1_notify_sctp_data_ind(sctp_data_ind->assoc_id, sctp_data_ind->stream,
-                                   sctp_data_ind->buffer, sctp_data_ind->buffer_length);
-#else
   ngap_gNB_handle_message(sctp_data_ind->assoc_id, sctp_data_ind->stream,
                           sctp_data_ind->buffer, sctp_data_ind->buffer_length);
-#endif
   result = itti_free(TASK_UNKNOWN, sctp_data_ind->buffer);
   AssertFatal (result == EXIT_SUCCESS, "Failed to free memory (%d)!\n", result);
 }
@@ -557,7 +527,9 @@ int ngap_gNB_handle_ul_ran_status_transfer(instance_t instance, const ngap_ran_s
   return 0;
 }
 
-void *ngap_gNB_process_itti_msg(void *notUsed) {
+void *ngap_gNB_process_itti_msg(void *notUsed)
+{
+  UNUSED(notUsed);
   MessageDef *received_msg = NULL;
   int         result;
   itti_receive_msg(TASK_NGAP, &received_msg);
@@ -687,12 +659,13 @@ void *ngap_gNB_process_itti_msg(void *notUsed) {
   return NULL;
 }
 
-
-void *ngap_gNB_task(void *arg) {
+void *ngap_gNB_task(void *arg)
+{
+  UNUSED(arg);
   ngap_gNB_init();
 
   while (1) {
-    (void) ngap_gNB_process_itti_msg(NULL);
+    ngap_gNB_process_itti_msg(NULL);
   }
 
   return NULL;
@@ -715,7 +688,6 @@ static int ngap_gNB_generate_ng_setup_request(
   NGAP_SliceSupportItem_t    *ssi = NULL;
   uint8_t  *buffer = NULL;
   uint32_t  len = 0;
-  int       ret = 0;
   DevAssert(instance_p != NULL);
   DevAssert(ngap_amf_data_p != NULL);
   ngap_amf_data_p->state = NGAP_GNB_STATE_WAITING;
@@ -817,7 +789,7 @@ static int ngap_gNB_generate_ng_setup_request(
   /* Non UE-Associated signalling -> stream = 0 */
   ngap_gNB_itti_send_sctp_data_req(instance_p->instance, ngap_amf_data_p->assoc_id, buffer, len, 0);
   ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_NGAP_NGAP_PDU, &pdu);
-  return ret;
+  return 0;
 }
 
 

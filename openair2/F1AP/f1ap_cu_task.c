@@ -1,34 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-
-/*! \file openair2/F1AP/f1ap_cu_task.c
-* \brief data structures for F1 interface modules
-* \author EURECOM/NTUST
-* \date 2018
-* \version 0.1
-* \company Eurecom
-* \email: navid.nikaein@eurecom.fr, raymond.knopp@eurecom.fr, bing-kai.hong@eurecom.fr
-* \note
-* \warning
-*/
 
 #include "f1ap_common.h"
 #include "f1ap_cu_interface_management.h"
@@ -43,9 +15,6 @@
 #include "openair2/RRC/NR/nr_rrc_defs.h"
 #include <openair3/ocp-gtpu/gtp_itf.h>
 
-//Fixme: Uniq dirty DU instance, by global var, datamodel need better management
-instance_t CUuniqInstance=0;
-
 static instance_t cu_task_create_gtpu_instance(eth_params_t *IPaddrs) {
   openAddr_t tmp= {0};
   strncpy(tmp.originHost, IPaddrs->my_addr, sizeof(tmp.originHost)-1);
@@ -54,9 +23,7 @@ static instance_t cu_task_create_gtpu_instance(eth_params_t *IPaddrs) {
   return gtpv1Init(tmp);
 }
 
-static void cu_task_handle_sctp_association_ind(instance_t instance,
-                                                sctp_new_association_ind_t *sctp_new_association_ind,
-                                                eth_params_t *IPaddrs)
+static void cu_task_handle_sctp_association_ind(instance_t instance, sctp_new_association_ind_t *sctp_new_association_ind)
 {
   // save the assoc id
   f1ap_cudu_inst_t *f1ap_cu_data = getCxt(instance);
@@ -108,7 +75,9 @@ static void cu_task_send_sctp_init_req(instance_t instance, char *my_addr)
   itti_send_msg_to_task(TASK_SCTP, instance, message_p);
 }
 
-void *F1AP_CU_task(void *arg) {
+void *F1AP_CU_task(void *arg)
+{
+  UNUSED(arg);
   MessageDef *received_msg = NULL;
   int         result;
   LOG_I(F1AP, "Starting F1AP at CU\n");
@@ -129,9 +98,6 @@ void *F1AP_CU_task(void *arg) {
   } else {
     LOG_I(F1AP, "In F1AP connection, don't start GTP-U, as we have also E1AP\n");
   }
-  // Fixme: fully inconsistent instances management
-  // dirty global var is a bad fix
-  CUuniqInstance=getCxt(instance)->gtpInst;
 
   while (1) {
     itti_receive_msg(TASK_CU_F1, &received_msg);
@@ -141,8 +107,7 @@ void *F1AP_CU_task(void *arg) {
     switch (ITTI_MSG_ID(received_msg)) {
       case SCTP_NEW_ASSOCIATION_IND:
         cu_task_handle_sctp_association_ind(ITTI_MSG_ORIGIN_INSTANCE(received_msg),
-                                            &received_msg->ittiMsg.sctp_new_association_ind,
-                                            IPaddrs);
+                                            &received_msg->ittiMsg.sctp_new_association_ind);
         break;
 
       case SCTP_NEW_ASSOCIATION_RESP:

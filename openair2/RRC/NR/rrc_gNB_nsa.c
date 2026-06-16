@@ -1,31 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file rrc_gNB_nsa.c
+/*!
  * \brief rrc NSA procedures for gNB
- * \author Raymond Knopp
- * \date 2019
- * \version 1.0
- * \company Eurecom
- * \email: raymond.knopp@eurecom.fr
  */
 
 #include <assert.h>
@@ -352,17 +330,20 @@ void rrc_add_nsa_user(gNB_RRC_INST *rrc, x2ap_ENDC_sgnb_addition_req_t *m, sctp_
   if (f1inst >= 0) {
       gtpv1u_gnb_create_tunnel_req_t req = {
         .ue_id = UE->rrc_ue_id,
-        .incoming_rb_id[0] = drb_id,
-        .pdusession_id[0] = drb_id,
-        .outgoing_teid[0] = 0xffff, // will be updated later
-        .dst_addr[0].length = 32,
-        .num_tunnels = 1,
+        .incoming_rb_id = drb_id,
+        .pdusession_id = drb_id,
+        .outgoing_teid = 0xffff, // will be updated later
+        .dst_addr.length = 32,
       };
       gtpv1u_gnb_create_tunnel_resp_t resp = {0};
       int ret = gtpv1u_create_ngu_tunnel(f1inst, &req, &resp, NULL, NULL);
       AssertFatal(ret == 0, "gtpv1u_create_ngu_tunnel failed: ret %d\n", ret);
-      memcpy(&drb->up_ul_tnl[0].tl_address, &resp.gnb_addr.buffer, 4);
-      drb->up_ul_tnl[0].teid = resp.gnb_NGu_teid[0];
+      AssertFatal(resp.gnb_addr.length == sizeof(in_addr_t),
+                  "GTP tunnel response address length %d does not match IPv4 size %zu\n",
+                  resp.gnb_addr.length,
+                  sizeof(in_addr_t));
+      memcpy(&drb->up_ul_tnl[0].tl_address, &resp.gnb_addr.buffer, resp.gnb_addr.length);
+      drb->up_ul_tnl[0].teid = resp.gnb_NGu_teid;
       drb->up_ul_tnl_len = 1;
   }
   uint64_t *ue_agg_mbr_ul = malloc_or_fail(sizeof(*ue_agg_mbr_ul));
@@ -457,7 +438,7 @@ static NR_CG_Config_t *generate_CG_Config(const NR_RRCReconfiguration_t *reconfi
   return cg_Config;
 }
 
-void rrc_add_nsa_user_resp(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const f1ap_ue_context_setup_resp_t *resp)
+void rrc_add_nsa_user_resp(gNB_RRC_UE_t *UE, const f1ap_ue_context_setup_resp_t *resp)
 {
   DevAssert(resp->crnti != NULL);
   /* we did not fill any DU-related ID info in rrc_add_nsa_user() */

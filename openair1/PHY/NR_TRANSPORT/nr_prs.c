@@ -1,22 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include "PHY/defs_gNB.h"
@@ -51,9 +34,9 @@ int nr_generate_prs(int slot, c16_t *txdataF, int16_t amp, prs_config_t *prs_cfg
     else if (prs_cfg->CombSize == 12){
       k_prime = k_prime_table[3][symInd];
     }
-    
-    k = (prs_cfg->REOffset+k_prime) % prs_cfg->CombSize + prs_cfg->RBOffset*12 + frame_parms->first_carrier_offset;
-    
+
+    k = (prs_cfg->REOffset + k_prime) % prs_cfg->CombSize + prs_cfg->RBOffset * 12;
+
     // QPSK modulation
     uint32_t *gold = nr_gold_prs(prs_cfg->NPRSID, slot, l);
     for (int m = 0; m < (12/prs_cfg->CombSize) * prs_cfg->NumRB; m++) {
@@ -66,10 +49,7 @@ int nr_generate_prs(int slot, c16_t *txdataF, int16_t amp, prs_config_t *prs_cfg
       txdataF[l * frame_parms->ofdm_symbol_size + k] = c16mulRealShift(mod_prs[m], amp, 15);
 
       k = k +  prs_cfg->CombSize;
-    
-      if (k >= frame_parms->ofdm_symbol_size)
-        k-=frame_parms->ofdm_symbol_size;
-      }
+    }
   }
 #ifdef DEBUG_PRS_MAP
   LOG_M("nr_prs.m", "prs",(int16_t *)&txdataF[prs_cfg->SymbolStart*frame_parms->ofdm_symbol_size],prs_cfg->NumPRSSymbols*frame_parms->ofdm_symbol_size, 1, 1);

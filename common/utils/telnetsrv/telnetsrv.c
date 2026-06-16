@@ -1,34 +1,11 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file common/utils/telnetsrv/telnetsrv.c
+/*!
  * \brief: implementation of a telnet server
- * \author Francois TABURET
- * \date 2017
- * \version 0.1
- * \company NOKIA BellLabs France
- * \email: francois.taburet@nokia-bell-labs.com
- * \note
- * \warning
  */
+
 #define _GNU_SOURCE
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -104,7 +81,6 @@ int get_phybsize(void) {
 };
 int add_telnetcmd(char *modulename,telnetshell_vardef_t *var, telnetshell_cmddef_t *cmd );
 int setoutput(char *buff, int debug, telnet_printfunc_t prnt);
-int wsetoutput(char *buff, int debug, telnet_printfunc_t prnt, ...);
 int setparam(char *buff, int debug, telnet_printfunc_t prnt);
 int wsetparam(char *buff, int debug, telnet_printfunc_t prnt, ...);
 int history_cmd(char *buff, int debug, telnet_printfunc_t prnt);
@@ -268,12 +244,9 @@ void redirstd(char *newfname,telnet_printfunc_t prnt ) {
   }
 }
 
-int wsetoutput(char *buffer, int debug, telnet_printfunc_t prnt, ...)
+int setoutput(char *buff, int debug, telnet_printfunc_t prnt)
 {
-  return 0;
-}
-
-int setoutput(char *buff, int debug, telnet_printfunc_t prnt) {
+  UNUSED(debug);
   char cmds[TELNET_MAX_MSGLENGTH/TELNET_CMD_MAXSIZE][TELNET_CMD_MAXSIZE];
   char *logfname;
   char stdout_str[64];
@@ -311,10 +284,16 @@ int setoutput(char *buff, int debug, telnet_printfunc_t prnt) {
 
 int wsetparam(char *buff, int debug, telnet_printfunc_t prnt, ...)
 {
+  UNUSED(buff);
+  UNUSED(debug);
+  UNUSED(prnt);
   return 0;
 }
 
-int setparam(char *buff, int debug, telnet_printfunc_t prnt) {
+int setparam(char *buff, int debug, telnet_printfunc_t prnt)
+{
+  UNUSED(debug);
+  UNUSED(prnt);
   char cmds[TELNET_MAX_MSGLENGTH/TELNET_CMD_MAXSIZE][TELNET_CMD_MAXSIZE];
   memset(cmds,0,sizeof(cmds));
   sscanf(buff,"%9s %9s %9s %9s %9s", cmds[0],cmds[1],cmds[2],cmds[3],cmds[4]  );
@@ -345,7 +324,9 @@ int setparam(char *buff, int debug, telnet_printfunc_t prnt) {
   return CMDSTATUS_NOTFOUND;
 } /* setparam */
 
-int history_cmd(char *buff, int debug, telnet_printfunc_t prnt) {
+int history_cmd(char *buff, int debug, telnet_printfunc_t prnt)
+{
+  UNUSED(debug);
   char cmds[TELNET_MAX_MSGLENGTH/TELNET_CMD_MAXSIZE][TELNET_CMD_MAXSIZE];
   memset(cmds,0,sizeof(cmds));
   sscanf(buff,"%9s %9s %9s %9s %9s", cmds[0],cmds[1],cmds[2],cmds[3],cmds[4]  );
@@ -525,7 +506,7 @@ void telnet_pushcmd(telnetshell_cmddef_t *cmd, char *cmdbuff, telnet_printfunc_t
   pushNotifiedFIFO(cmd->qptr, msg);
 }
 
-int process_command(char *buf, int iteration)
+int process_command(char *buf)
 {
   int i,j,k;
   char modulename[TELNET_CMD_MAXSIZE];
@@ -561,7 +542,7 @@ int process_command(char *buf, int iteration)
   }
 
   rt=CMDSTATUS_NOTFOUND;
-  j = sscanf(buf,"%19s %19s %m[^\t\n]",modulename,cmd,&cmdb);
+  j = sscanf(buf,"%19s %63s %m[^\t\n]",modulename,cmd,&cmdb);
 
   if (telnetparams.telnetdbg > 0)
     printf("process_command: %i words, module=%s cmd=%s, parameters= %s\n", j, modulename, cmd, (cmdb == NULL) ? "" : cmdb);
@@ -604,7 +585,7 @@ int process_command(char *buf, int iteration)
         char tbuff[64];
         client_printf(CSI "1J" CSI "1;10H         " STDFMT "%s %i/%i\n",
                       get_time(tbuff,sizeof(tbuff)),lc,telnetparams.loopcount );
-        process_command(buf + strlen("loop") + 1, lc);
+        process_command(buf + strlen("loop") + 1);
         errno=0;
         int rs = read(telnetparams.new_socket,dummybuff,sizeof(dummybuff));
 
@@ -733,7 +714,7 @@ void run_telnetsrv(void) {
       }
 
       if (strlen(buf) > 2 ) {
-        status = process_command(buf, 0);
+        status = process_command(buf);
       } else
         status=CMDSTATUS_NOCMD;
 
@@ -947,6 +928,12 @@ int add_telnetcmd(char *modulename, telnetshell_vardef_t *var, telnetshell_cmdde
       telnetparams.CmdParsers[i].cmd = cmd;
       telnetparams.CmdParsers[i].var = var;
       for (int j = 0; cmd[j].cmdfunc != NULL; j++) {
+        size_t cmdnamelen = strnlen(cmd[j].cmdname, TELNET_CMD_MAXSIZE);
+        AssertFatal(cmdnamelen < TELNET_CMD_MAXSIZE,
+                    "cmdname %s too long: %ld >= %d",
+                    cmd[j].cmdname,
+                    cmdnamelen,
+                    TELNET_CMD_MAXSIZE);
         if (cmd[j].cmdflags & TELNETSRV_CMDFLAG_PUSHINTPOOLQ) {
           if (afifo == NULL) {
             afifo = calloc_or_fail(1, sizeof(notifiedFIFO_t));

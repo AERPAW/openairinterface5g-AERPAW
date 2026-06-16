@@ -1,22 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.0  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 /***********************************************************************
@@ -33,7 +16,6 @@
 #define SSS_NR_H
 
 #include "limits.h"
-#include "PHY/types.h"
 #include "pss_nr.h"
 
 /************** DEFINE ********************************************/
@@ -61,47 +43,17 @@
 
 #define SSS_METRIC_FLOOR_NR   (30000)
 
-/************** VARIABLES *****************************************/
+typedef struct {
+  int nb_antennas_rx;
+  int samples_per_slot_wCP;
+  int ofdm_symbol_size;
+  int first_carrier_offset;
+  int ssb_start_subcarrier;
+  int subcarrier_spacing;
+} nr_sss_params_t;
+sss_detection_result_t rx_sss_nr(nr_sss_params_t *params,
+                                 pss_detection_result_t *pss,
+                                 int target_Nid_cell,
+                                 c16_t rxdataF[NR_N_SYMBOLS_SSB][params->nb_antennas_rx][params->ofdm_symbol_size]);
 
-#define PHASE_HYPOTHESIS_NUMBER       (16)
-#define INDEX_NO_PHASE_DIFFERENCE (3) /* this is for no phase shift case */
-
-/************** FUNCTION ******************************************/
-
-static const c16_t phase_nr[PHASE_HYPOTHESIS_NUMBER] = {
-    // {pi/3 ---- pi/3, -pi/3 ---- pi/3}
-    {16384, -28377},
-    {20173, -25821},
-    {23571, -22762},
-    {26509, -19260},
-    {28932, -15383},
-    {30791, -11207},
-    {32051, -6813},
-    {32687, -2286},
-    {32687, 2286},
-    {32051, 6813},
-    {30791, 11207},
-    {28932, 15383},
-    {26509, 19260},
-    {23571, 22762},
-    {20173, 25821},
-    {16384, 28377}};
-
-void init_context_sss_nr(int amp);
-void free_context_sss_nr(void);
-
-void insert_sss_nr(int16_t *sss_time,
-                   NR_DL_FRAME_PARMS *frame_parms);
-
-bool rx_sss_nr(const NR_DL_FRAME_PARMS *frame_parms,
-               int nid2,
-               int target_Nid_cell,
-               int freq_offset_pss,
-               int ssb_start_subcarrier,
-               int *Nid_cell,
-               int32_t *tot_metric,
-               uint8_t *phase_max,
-               int *freq_offset_sss,
-               c16_t rxdataF[][frame_parms->samples_per_slot_wCP]);
 #endif /* SSS_NR_H */
-

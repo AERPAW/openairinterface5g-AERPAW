@@ -1,10 +1,6 @@
 /*
-                                nfapi_nr_interface.h
-                             -------------------
-  AUTHOR  : Chenyu Zhang, Florian Kaltenberger
-  COMPANY : BUPT, EURECOM
-  EMAIL   : octopus@bupt.edu.cn, florian.kaltenberger@eurecom.fr
-*/
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 
 #ifndef _NFAPI_NR_INTERFACE_SCF_H_
 #define _NFAPI_NR_INTERFACE_SCF_H_
@@ -15,19 +11,13 @@
 #include "nfapi_interface.h"
 #include "nfapi_nr_interface.h"
 
-#define NFAPI_NR_MAX_NB_CCE_AGGREGATION_LEVELS 5
-#define NFAPI_NR_MAX_NB_TCI_STATES_PDCCH 64
 #define NFAPI_NR_MAX_NB_CORESETS 12
-#define NFAPI_NR_MAX_NB_SEARCH_SPACES 40
-
 #define NFAPI_MAX_NUM_UL_UE_PER_GROUP 6
 #define NFAPI_MAX_NUM_UL_PDU 255
-#define NFAPI_MAX_NUM_UCI_INDICATION 8
 #define NFAPI_MAX_NUM_GROUPS 8
 #define NFAPI_MAX_NUM_CB 8
 #define NFAPI_MAX_NUM_PRGS 1
 #define NFAPI_MAX_NUM_BG_IF 6
-#define NFAPI_MAX_NUM_PERIODS 8
 
 // Extension to the generic structures for single tlv values
 
@@ -330,8 +320,14 @@ typedef struct
 
 #define NFAPI_NR_CONFIG_RSSI_MEASUREMENT_TAG 0x1028
 #define NFAPI_NR_CONFIG_TDD_TABLE 0x1035
-#define NFAPI_NR_CONFIG_BEAMFORMING_TABLE_TAG 0x1043 // This tag was added in version 5 of the SCF222 standard ( Table 3-50 of SCF222.10.05 )
 #define NFAPI_NR_CONFIG_PRECODING_TABLE_V6_TAG 0x104B // This tag was added in version 6 of the SCF222 standard ( Table 3-52 of SCF222.10.06 )
+#ifdef ENABLE_AERIAL
+  #define NFAPI_NR_CONFIG_NUM_TX_PORT_TAG 0xA016
+  #define NFAPI_NR_CONFIG_NUM_RX_PORT_TAG 0xA017
+  #define NFAPI_NR_CONFIG_BEAMFORMING_TABLE_TAG 0xA010 
+#else
+  #define NFAPI_NR_CONFIG_BEAMFORMING_TABLE_TAG 0x1043 // This tag was added in version 5 of the SCF222 standard ( Table 3-50 of SCF222.10.05 )
+#endif
 
 //table 3-21
 typedef struct 
@@ -347,6 +343,8 @@ typedef struct
   nfapi_uint16_tlv_t ul_grid_size[5];//Grid size 𝑁𝑔𝑟𝑖𝑑 𝑠𝑖𝑧𝑒,𝜇 for each of the numerologies [38.211, sec 4.4.2]. Value: 0->275 0 = this numerology not used
   nfapi_uint16_tlv_t num_rx_ant;//
   nfapi_uint8_tlv_t  frequency_shift_7p5khz;//Indicates presence of 7.5KHz frequency shift. Value: 0 = false 1 = true
+  nfapi_uint16_tlv_t num_tx_port; //used by Aerial L1 when BF mode is enabled to signal the number of logical antenna ports
+  nfapi_uint16_tlv_t num_rx_port; //used by Aerial L1 when BF mode is enabled to signal the number of logical antenna ports
 
 } nfapi_nr_carrier_config_t; 
 
@@ -855,6 +853,21 @@ typedef struct {
 
 } nfapi_nr_dl_dci_pdu_t;
 
+// The maximum number of spatial streams to be mapped depends on TLV 0x16E and
+// the number of streams could be same as number of layers or number of antenna
+// ports or number of baseband ports. Hence we set this to be the maximum number
+// of baseband ports
+#define MAX_NUM_SPATIAL_STREAMS 16
+
+typedef struct {
+  uint16_t dci_index;
+  uint16_t spatial_stream_index;
+} nfapi_v4_dci_spatial_stream_index_t;
+
+typedef struct {
+  uint16_t numSpatialStreams;
+  nfapi_v4_dci_spatial_stream_index_t dci_spatialStreamIndices[MAX_NUM_SPATIAL_STREAMS];
+} nfapi_v4_pdcch_pdu_parameters_t;
 
 typedef struct {
   ///Bandwidth part size [TS38.213 sec12]. Number of contiguous PRBs allocated to the BWP,Value: 1->275
@@ -887,12 +900,31 @@ typedef struct {
   uint16_t numDlDci;
   ///DL DCI PDU
   nfapi_nr_dl_dci_pdu_t dci_pdu[MAX_DCI_CORESET];
-}  nfapi_nr_dl_tti_pdcch_pdu_rel15_t;
+  /// Spatial stream indexing for MU-MIMO
+  nfapi_v4_pdcch_pdu_parameters_t param_v4;
+} nfapi_nr_dl_tti_pdcch_pdu_rel15_t;
 
 typedef struct {
   uint8_t ldpcBaseGraph;
   uint32_t tbSizeLbrmBytes;
 }nfapi_v3_pdsch_maintenance_parameters_t;
+
+typedef struct {
+  /// Number of spatial streams used in the index array
+  uint8_t numSpatialStreamIndices;
+  /// Spatial stream index array
+  uint16_t spatialStreamIndices[MAX_NUM_SPATIAL_STREAMS];
+} nfapi_nr_spatial_stream_index_t;
+
+#define MAX_NUM_CODEWORDS 2
+
+typedef struct {
+  // MU-MIMO support in FAPIv4
+  /// Number of codewords with spatial stream indices
+  uint8_t numberCodewords;
+  /// Spatial stream indexing for codeworeds
+  nfapi_nr_spatial_stream_index_t spatialStreamsCw[MAX_NUM_CODEWORDS];
+} nfapi_v4_pdsch_parameters_t;
 
 typedef struct {
   uint16_t pduBitmap;
@@ -986,8 +1018,9 @@ typedef struct {
   uint32_t dlTbCrc;
 
   nfapi_v3_pdsch_maintenance_parameters_t maintenance_parms_v3;
-}nfapi_nr_dl_tti_pdsch_pdu_rel15_t;
-
+  /// PDSCH parameters FAPI v4. used only for spatial stream indexing in MU-MIMO
+  nfapi_v4_pdsch_parameters_t param_v4;
+} nfapi_nr_dl_tti_pdsch_pdu_rel15_t;
 
 //for pdsch_pdu:
 /*
@@ -1071,8 +1104,14 @@ typedef struct
   uint8_t power_control_offset;     // Ratio of PDSCH EPRE to NZP CSI-RSEPRE [3GPP TS 38.214, sec 5.2.2.3.1], Value: 0->23 representing -8 to 15 dB in 1dB steps; 255: L1 is configured with ProfileSSS
   uint8_t power_control_offset_ss;  // Ratio of NZP CSI-RS EPRE to SSB/PBCH block EPRE [3GPP TS 38.214, sec 5.2.2.3.1], Values: 0: -3dB; 1: 0dB; 2: 3dB; 3: 6dB; 255: L1 is configured with ProfileSSS
   nfapi_nr_tx_precoding_and_beamforming_t precodingAndBeamforming;
+  /// Spatial stream indexing for MU-MIMO
+  struct nfapi_nr_csi_spatial_stream_index {
+    /// Number of spatial streams used in the index array
+    uint8_t numSpatialStreamIndices;
+    /// Spatial stream index array
+    uint8_t spatialStreamIndices[MAX_NUM_SPATIAL_STREAMS];
+  } param_v4;
 } nfapi_nr_dl_tti_csi_rs_pdu_rel15_t;
-
 
 typedef struct
 {
@@ -1114,6 +1153,11 @@ typedef struct {
   /// A value indicating the channel quality between the gNB and nrUE. Value: 0->255 dBM
   uint8_t  ssbRsrp;
   nfapi_nr_tx_precoding_and_beamforming_t precoding_and_beamforming;
+  /// Spatial stream indexing
+  struct nfapi_v4_ssb_param {
+    uint8_t spatialStreamIndexPresent;
+    uint16_t spatialStreamIndex;
+  } param_v4;
 } nfapi_nr_dl_tti_ssb_pdu_rel15_t;
 
 typedef struct {
@@ -1281,7 +1325,7 @@ typedef struct
   uint8_t  prach_start_symbol;
   uint16_t num_cs;
   nfapi_nr_ul_beamforming_t beamforming;
-
+  nfapi_nr_spatial_stream_index_t param_v4;
 } nfapi_nr_prach_pdu_t;
 
 //for pusch_pdu:
@@ -1394,6 +1438,8 @@ typedef struct
   //beamforming
   nfapi_nr_ul_beamforming_t beamforming;
   nfapi_v3_pdsch_maintenance_parameters_t maintenance_parms_v3;
+  // Spatial stream indexing for MU-MIMO
+  nfapi_nr_spatial_stream_index_t param_v4;
 } nfapi_nr_pusch_pdu_t;
 
 //for pucch_pdu:
@@ -1439,7 +1485,7 @@ typedef struct
   uint16_t bit_len_csi_part2;
 
   nfapi_nr_ul_beamforming_t beamforming;
-
+  nfapi_nr_spatial_stream_index_t param_v4;
 } nfapi_nr_pucch_pdu_t;
 
 typedef struct {

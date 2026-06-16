@@ -1,22 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include "assertions.h"
@@ -225,13 +208,13 @@ do {                                \
     (bitstring)->buf[1] = (intprotalg);            \
 }while(0)
 
-#define KENB_STAR_TO_BIT_STRING(kenbstar, bitstring)    \
-do {                            \
-    (bitstring)->size=32;                \
-    (bitstring)->bits_unused=0;            \
-    (bitstring)->buf= calloc (32, sizeof (uint8_t));\
-    memcpy((bitstring)->buf, kenbstar, 32*sizeof(uint8_t));            \
-}while(0)
+#define AS_KEY_STAR_TO_BIT_STRING(askeystar, bitstring)        \
+  do {                                                         \
+    (bitstring)->size = 32;                                    \
+    (bitstring)->bits_unused = 0;                              \
+    (bitstring)->buf = calloc_or_fail(32, sizeof(uint8_t));    \
+    memcpy((bitstring)->buf, askeystar, 32 * sizeof(uint8_t)); \
+  } while (0)
 
 #define UEAGMAXBITRTD_TO_ASN_PRIMITIVES(uegmaxbitrtd, asnprimitives)        \
 do {                                         \
@@ -285,12 +268,12 @@ do {                                    \
     BUFFER_TO_UINT32((aSN)->buf, x);               \
   } while (0)
 
-#define BIT_STRING_TO_NR_CELL_IDENTITY(aSN, vALUE)                     \
-do {                                                                   \
-    DevCheck((aSN)->bits_unused == 4, (aSN)->bits_unused, 4, 0);       \
-    vALUE = ((aSN)->buf[0] << 28) | ((aSN)->buf[1] << 20) |            \
-        ((aSN)->buf[2] << 12) | ((aSN)->buf[3]<<4) | ((aSN)->buf[4]>>4);  \
-} while(0)
+#define BIT_STRING_TO_NR_CELL_IDENTITY(aSN, vALUE)                                                                \
+  do {                                                                                                            \
+    DevCheck((aSN)->bits_unused == 4, (aSN)->bits_unused, 4, 0);                                                  \
+    (vALUE) = ((uint64_t)(aSN)->buf[0] << 28) | ((uint64_t)(aSN)->buf[1] << 20) | ((uint64_t)(aSN)->buf[2] << 12) \
+              | ((uint64_t)(aSN)->buf[3] << 4) | ((uint64_t)(aSN)->buf[4] >> 4);                                  \
+  } while (0)
 
 #define MCC_HUNDREDS(vALUE) \
     ((vALUE) / 100)
@@ -496,6 +479,16 @@ do {                                                    \
     (bITsTRING)->size = 4;                              \
     (bITsTRING)->bits_unused = 4;                       \
 } while(0)
+
+#define MACRO_BIT_STRING_TO_GNB_ID(bITsTRING, oUT)          \
+do {                                                        \
+    uint8_t *_buf = (bITsTRING)->buf;                       \
+    (oUT) =                                                 \
+        ((uint32_t)_buf[0] << 20) |                         \
+        ((uint32_t)_buf[1] << 12) |                         \
+        ((uint32_t)_buf[2] << 4)  |                         \
+        (((uint32_t)_buf[3] & 0xF0) >> 4);                  \
+} while (0)
 
 /* TS 36.413 v10.9.0 section 9.2.1.38:
  * E-UTRAN CGI/Cell Identity

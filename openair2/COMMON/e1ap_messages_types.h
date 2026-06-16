@@ -1,24 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Author and copyright: Laurent Thomas, open-cells.com
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef E1AP_MESSAGES_TYPES_H
@@ -29,13 +10,13 @@
 #include "common/ngran_types.h"
 #include "common/platform_types.h"
 #include "common/5g_platform_types.h"
+#include "common/platform_constants.h"
 
 /* Definitions according to 3GPP TS 38.463 */
 #define E1AP_MAX_NUM_TRANSAC_IDS 4
 #define E1AP_MAX_NUM_PLMNS 4
 #define E1AP_MAX_NUM_CELL_GROUPS 4
 #define E1AP_MAX_NUM_QOS_FLOWS 64
-#define E1AP_MAX_NUM_PDU_SESSIONS 4
 #define E1AP_MAX_NUM_DRBS 32
 #define E1AP_MAX_NUM_UP_PARAM 4
 #define E1AP_SECURITY_KEY_SIZE 16 // keys have 128 bits length
@@ -138,6 +119,12 @@ typedef enum BEARER_CONTEXT_STATUS_e {
   BEARER_SUSPEND,
   BEARER_RESUME,
 } BEARER_CONTEXT_STATUS_t;
+
+typedef enum activity_notification_level_e {
+  activity_notification_level_drb = 0,
+  activity_notification_level_pdu_session = 1,
+  activity_notification_level_ue = 2,
+} activity_notification_level_t;
 
 typedef enum cell_group_id_e {
   MCG = 0,
@@ -505,13 +492,15 @@ typedef struct e1ap_bearer_setup_req_s {
   long *ueDlMaxIPBitRate;
   // Serving PLMN (M)
   PLMN_ID_t servingPLMNid;
+  // Activity Notification Level (M)
+  activity_notification_level_t anl;
   // Bearer Context Status Change (O)
   BEARER_CONTEXT_STATUS_t bearerContextStatus;
   // UE Inactivity Timer (O)
   int *inactivityTimerUE;
   // NG-RAN PDU Session Resource To Setup List (M)
   int numPDUSessions;
-  pdu_session_to_setup_t pduSession[E1AP_MAX_NUM_PDU_SESSIONS];
+  pdu_session_to_setup_t *pduSession;
 } e1ap_bearer_setup_req_t;
 
 /** Bearer Context Setup Failure (9.2.2.3 3GPP TS 38.463) */
@@ -546,13 +535,13 @@ typedef struct e1ap_bearer_mod_req_s {
   bool dataDiscardRequired;
   // NG-RAN PDU Session Resource To Setup List (O)
   int numPDUSessions;
-  pdu_session_to_setup_t pduSession[E1AP_MAX_NUM_PDU_SESSIONS];
+  pdu_session_to_setup_t *pduSession;
   // NG-RAN PDU Session Resource To Modify List (O)
   int numPDUSessionsMod;
-  pdu_session_to_mod_t pduSessionMod[E1AP_MAX_NUM_PDU_SESSIONS];
+  pdu_session_to_mod_t *pduSessionMod;
   // NG-RAN PDU Session Resource To Remove List (O)
   int numPDUSessionsRem;
-  pdu_session_to_remove_t pduSessionRem[E1AP_MAX_NUM_PDU_SESSIONS];
+  pdu_session_to_remove_t *pduSessionRem;
 } e1ap_bearer_mod_req_t;
 
 typedef struct e1ap_bearer_release_cmd_s {
@@ -644,7 +633,7 @@ typedef struct e1ap_bearer_setup_resp_s {
   uint32_t gNB_cu_cp_ue_id;
   uint32_t gNB_cu_up_ue_id;
   int numPDUSessions;
-  pdu_session_setup_t pduSession[E1AP_MAX_NUM_PDU_SESSIONS];
+  pdu_session_setup_t *pduSession;
 } e1ap_bearer_setup_resp_t;
 
 typedef struct e1ap_bearer_modif_resp_s {
@@ -654,7 +643,7 @@ typedef struct e1ap_bearer_modif_resp_s {
   uint32_t gNB_cu_up_ue_id;
   // NG-RAN PDU Session Resource Modified List (O)
   int numPDUSessionsMod;
-  pdu_session_modif_t pduSessionMod[E1AP_MAX_NUM_PDU_SESSIONS];
+  pdu_session_modif_t *pduSessionMod;
 } e1ap_bearer_modif_resp_t;
 
 /* E1AP Connection Loss indication */

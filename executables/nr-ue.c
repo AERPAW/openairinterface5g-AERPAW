@@ -1,28 +1,10 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.0  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include "PHY/defs_nr_common.h"
 #define _GNU_SOURCE // For pthread_setname_np
 #include <pthread.h>
-#include <openair1/PHY/impl_defs_top.h>
 #include "executables/nr-ue-ru.h"
 #include "executables/nr-uesoftmodem.h"
 #include "PHY/INIT/nr_phy_init.h"
@@ -177,8 +159,6 @@ void init_nr_ue_vars(PHY_VARS_NR_UE *ue, uint8_t UE_id)
   ue->dci_thres   = 0;
   ue->target_Nid_cell = -1;
 
-  ue->nrUE_config.ntn_config.params_changed = false;
-
   // initialize all signal buffers
   init_nr_ue_signal(ue, nb_connected_gNB);
 
@@ -281,7 +261,7 @@ static int nr_ue_slot_select(const fapi_nr_config_request_t *cfg, int nr_slot)
   if (current_slot->max_num_of_symbol_per_slot_list[0].slot_config == 2)
     return NR_MIXED_SLOT;
 
-  for (int i = 1; i < NR_NUMBER_OF_SYMBOLS_PER_SLOT; i++) {
+  for (int i = 1; i < NR_SYMBOLS_PER_SLOT; i++) {
     // if the 1st symbol is DL and any other is not, the slot is mixed
     if (current_slot->max_num_of_symbol_per_slot_list[i].slot_config != 0) {
       return NR_MIXED_SLOT;
@@ -578,8 +558,8 @@ static int UE_dl_preprocessing(PHY_VARS_NR_UE *UE,
     if (phy_data->dlsch[0].active
         && (phy_data->dlsch[0].rnti_type == TYPE_C_RNTI_ || phy_data->dlsch[0].rnti_type == TYPE_RA_RNTI_)) {
       // indicate to tx thread to wait for DLSCH decoding
-      if (phy_data->dlsch[0].dlsch_config.k1_feedback) {  // if feedback is 0 there is no HARQ associated with this DLSCH
-        const int ack_nack_slot = (proc->nr_slot_rx + phy_data->dlsch[0].dlsch_config.k1_feedback) % fp->slots_per_frame;
+      if (phy_data->dlsch_config.k1_feedback) {  // if feedback is 0 there is no HARQ associated with this DLSCH
+        const int ack_nack_slot = (proc->nr_slot_rx + phy_data->dlsch_config.k1_feedback) % fp->slots_per_frame;
         tx_wait_for_dlsch[ack_nack_slot]++;
       }
     }
@@ -826,7 +806,6 @@ void *UE_thread(void *arg)
           /* For IQ recorder-player we force synchronization to happen in a fixed duration so that
              the replay runs in sync with recorded samples.
           */
-          extern openair0_config_t openair0_cfg[MAX_CARDS];
           openair0_config_t *cfg0 = &openair0_cfg[UE->rf_map.card];
           const unsigned int sync_in_frames = cfg0->recplay_conf->u_f_sync;
           while (trashed_frames != sync_in_frames) {
